@@ -1,6 +1,6 @@
 # AIassistant
 
-A Windows-based NapCat QQ notification forwarder. It listens to Windows toast notifications from IDEs and tools such as VS Code, Cursor, Windsurf, Trae, Kiro, CodeBuddy, Antigravity, Zed, Codex, and PowerShell, then forwards them to a target QQ account through the NapCat WebSocket API.
+A Windows-based NapCat QQ notification forwarder and Codex command bridge. It listens to Windows toast notifications from IDEs and tools such as VS Code, Cursor, Windsurf, Trae, Kiro, CodeBuddy, Antigravity, Zed, Codex, and PowerShell, forwards them to a target QQ account through the NapCat WebSocket API, and can accept QQ private commands to drive the local Codex desktop app.
 
 ## Features
 
@@ -8,6 +8,9 @@ A Windows-based NapCat QQ notification forwarder. It listens to Windows toast no
 - Filter notifications by source allowlist
 - Deduplicate repeated notifications in a short time window
 - Forward messages through the NapCat WebSocket API
+- Accept `/codex <prompt>` from a single QQ allowlist user
+- Enforce strict single-task execution for Codex automation
+- Capture and return a desktop screenshot after each Codex task
 - Provide batch scripts to start NapCat and the forwarder service
 
 ## Requirements
@@ -42,7 +45,8 @@ Edit `.env` and set at least these values:
 
 - `NAPCAT_TOKEN`: NapCat access token
 - `NAPCAT_START_SCRIPT`: Local path to `napcat.bat`
-- `QQ_USER_ID`: QQ account that should receive forwarded notifications
+- `QQ_USER_ID`: QQ account that should receive forwarded notifications and send commands
+- `CODEX_LAUNCH_COMMAND`: Launch command for Codex if it is not already running
 
 ## Run
 
@@ -64,6 +68,25 @@ Development mode:
 npm run dev
 ```
 
+## QQ Commands
+
+Only private messages from `QQ_USER_ID` can trigger commands.
+
+- `ping`
+- `菜单` / `help`
+- `/status` / `状态`
+- `/codex <prompt>`
+- `/codex open`
+- `/codex focus`
+- `/codex screenshot`
+- `/codex paste <prompt>`
+- `/codex send <prompt>`
+- `/shot`
+
+`/codex <prompt>` is the same as `/codex send <prompt>`.
+
+Codex tasks are strictly serialized. If one task is still running, the next `/codex` command is rejected immediately and is not queued.
+
 ## Environment Variables
 
 | Variable | Description | Default |
@@ -72,10 +95,15 @@ npm run dev
 | `NAPCAT_TOKEN` | NapCat access token | empty |
 | `NAPCAT_START_SCRIPT` | Local path to the NapCat startup script | empty |
 | `BOT_NAME` | Bot display name used in responses | `NapCatBot` |
-| `QQ_USER_ID` | QQ account that receives notifications | empty |
+| `QQ_USER_ID` | QQ account that receives notifications and can issue commands | empty |
 | `NOTIFY_SOURCE_ALLOWLIST` | Allowed notification sources | `Code,Cursor,Windsurf,Trae,Kiro,CodeBuddy,Antigravity,Zed,Codex,PowerShell` |
 | `NOTIFY_FILTER_MODE` | Reserved filter mode | `all` |
 | `NOTIFY_KEYWORDS` | Reserved keyword list, comma-separated | empty |
+| `CODEX_LAUNCH_COMMAND` | Launch command for Codex desktop | `shell:AppsFolder\OpenAI.Codex_2p2nqsd0c76g0!App` |
+| `AUTOMATION_TIMEOUT_MS` | Timeout for a single Codex task | `30000` |
+| `SCREENSHOT_DIR` | Optional screenshot output directory | system temp dir |
+| `SCREENSHOT_RETENTION` | Number of recent screenshots to retain | `20` |
+| `SCREENSHOT_AFTER_ACTION_DELAY_MS` | Delay before taking the post-task screenshot for `/codex paste` and `/codex send` | `1200` |
 
 ## Privacy and Security
 
