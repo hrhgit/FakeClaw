@@ -1,0 +1,14 @@
+{
+  "name": "aiassistant-qq-bot",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start:all": "start-bot.bat",
+    "start": "node src/index.js",
+    "dev": "node --watch src/index.js"
+  },
+  "dependencies": {
+    "dotenv": "^16.6.1",
+    "ws": "^8.18.3"
+  }
+}
