@@ -84,7 +84,7 @@ internal static class Program
     private static Options ParseOptions(string[] args)
     {
         var options = new Options();
-        options.SourceAllowList = "Code,Cursor,Windsurf,Codex,PowerShell";
+        options.SourceAllowList = "Code,Cursor,Windsurf,Trae,Kiro,CodeBuddy,Antigravity,JetBrains,Zed,Codex,PowerShell";
         options.PollIntervalMs = DefaultPollIntervalMs;
         options.ExitAfterInit = false;
 
@@ -283,51 +283,122 @@ internal static class Program
 
     private static string NormalizeSourceName(string displayName, string appUserModelId, IEnumerable<string> rawLines)
     {
-        var candidates = new List<string>();
-
-        if (!string.IsNullOrWhiteSpace(displayName))
+        foreach (var candidate in new[] { displayName, appUserModelId })
         {
-            candidates.Add(displayName);
+            var normalized = NormalizeSourceCandidate(candidate);
+            if (!string.IsNullOrWhiteSpace(normalized))
+            {
+                return normalized;
+            }
         }
 
-        if (!string.IsNullOrWhiteSpace(appUserModelId))
+        foreach (var candidate in rawLines.Where(line => !string.IsNullOrWhiteSpace(line)))
         {
-            candidates.Add(appUserModelId);
-        }
-
-        candidates.AddRange(rawLines.Where(line => !string.IsNullOrWhiteSpace(line)));
-
-        foreach (var candidate in candidates)
-        {
-            var lower = candidate.Trim().ToLowerInvariant();
-
-            if (lower.Contains("cursor") || lower.Contains("anysphere.cursor"))
+            var normalized = NormalizeSourceCandidate(candidate);
+            if (!string.IsNullOrWhiteSpace(normalized))
             {
-                return "Cursor";
-            }
-
-            if (lower.Contains("windsurf"))
-            {
-                return "Windsurf";
-            }
-
-            if (lower.Contains("codex") || lower.Contains("openai.codex"))
-            {
-                return "Codex";
-            }
-
-            if (lower.Contains("powershell") || lower.Contains("pwsh") || lower.Contains("powershell.exe"))
-            {
-                return "PowerShell";
-            }
-
-            if (lower.Contains("visual studio code") || lower.Contains("microsoft.visualstudiocode") || lower == "code" || lower == "vscode" || lower == "vs code")
-            {
-                return "Code";
+                return normalized;
             }
         }
 
         return null;
+    }
+
+    private static string NormalizeSourceCandidate(string candidate)
+    {
+        if (string.IsNullOrWhiteSpace(candidate))
+        {
+            return null;
+        }
+
+        var lower = candidate.Trim().ToLowerInvariant();
+        var compact = lower.Replace(" ", string.Empty)
+            .Replace(".", string.Empty)
+            .Replace("_", string.Empty)
+            .Replace("-", string.Empty);
+
+        if (lower.Contains("cursor") || lower.Contains("anysphere.cursor"))
+        {
+            return "Cursor";
+        }
+
+        if (lower.Contains("windsurf"))
+        {
+            return "Windsurf";
+        }
+
+        if (compact.Contains("trae"))
+        {
+            return "Trae";
+        }
+
+        if (compact.Contains("kiro"))
+        {
+            return "Kiro";
+        }
+
+        if (compact.Contains("codebuddy"))
+        {
+            return "CodeBuddy";
+        }
+
+        if (compact.Contains("antigravity"))
+        {
+            return "Antigravity";
+        }
+
+        if (MatchesJetBrains(compact))
+        {
+            return "JetBrains";
+        }
+
+        if (MatchesZed(lower, compact))
+        {
+            return "Zed";
+        }
+
+        if (lower.Contains("codex") || lower.Contains("openai.codex"))
+        {
+            return "Codex";
+        }
+
+        if (lower.Contains("powershell") || lower.Contains("pwsh") || lower.Contains("powershell.exe"))
+        {
+            return "PowerShell";
+        }
+
+        if (lower.Contains("visual studio code") || lower.Contains("microsoft.visualstudiocode") || compact == "code" || compact == "vscode" || compact == "vscodeinsiders" || compact == "codeinsiders")
+        {
+            return "Code";
+        }
+
+        return null;
+    }
+
+    private static bool MatchesJetBrains(string compact)
+    {
+        return compact.Contains("jetbrains")
+            || compact.Contains("junie")
+            || compact.Contains("aiassistant")
+            || compact.Contains("intellij")
+            || compact.Contains("pycharm")
+            || compact.Contains("webstorm")
+            || compact.Contains("goland")
+            || compact.Contains("clion")
+            || compact.Contains("rider")
+            || compact.Contains("androidstudio")
+            || compact.Contains("phpstorm")
+            || compact.Contains("rubymine")
+            || compact.Contains("dataspell")
+            || compact.Contains("fleet");
+    }
+
+    private static bool MatchesZed(string lower, string compact)
+    {
+        return compact == "zed"
+            || compact.Contains("zededitor")
+            || lower.Contains("dev.zed.zed")
+            || lower.Contains("zed industries");
     }
 
     private static object GetPropertyValue(object instance, string propertyName)

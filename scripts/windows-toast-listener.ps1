@@ -1,6 +1,6 @@
 [CmdletBinding()]
 param(
-  [string]$SourceAllowList = "Code,Cursor,Windsurf,Codex,PowerShell",
+  [string]$SourceAllowList = "Code,Cursor,Windsurf,Trae,Kiro,CodeBuddy,Antigravity,JetBrains,Zed,Codex,PowerShell",
   [int]$PollIntervalMs = 1500,
   [switch]$ExitAfterInit
 )

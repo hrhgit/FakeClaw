@@ -7,42 +7,22 @@ import { fileURLToPath } from "node:url";
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
+const DEFAULT_CODEX_LAUNCH_COMMAND = "shell:AppsFolder\\OpenAI.Codex_2p2nqsd0c76g0!App";
 const DEFAULT_AUTOMATION_TIMEOUT_MS = 30000;
 const DEFAULT_SCREENSHOT_RETENTION = 20;
 const DEFAULT_SCREENSHOT_AFTER_ACTION_DELAY_MS = 1200;
 const DEFAULT_SCREENSHOT_DIR = path.join(os.tmpdir(), "fakeclaw-screenshots");
-const DEFAULT_CODEX_LAUNCH_COMMAND = "shell:AppsFolder\\OpenAI.Codex_2p2nqsd0c76g0!App";
 const POWERSHELL_PATH = process.env.POWERSHELL_PATH || "powershell.exe";
 const AUTOMATION_SCRIPT_PATH = path.resolve(__dirname, "../scripts/codex-automation.ps1");
 const SCREENSHOT_SCRIPT_PATH = path.resolve(__dirname, "../scripts/capture-desktop-screenshot.ps1");
-const MINIMIZE_WINDOW_SCRIPT_PATH = path.resolve(__dirname, "../scripts/minimize-codex-window.ps1");
+const MINIMIZE_CODEX_SCRIPT_PATH = path.resolve(__dirname, "../scripts/minimize-codex-window.ps1");
 
-export const AUTOMATION_TARGET_APPS = {
-  CODEX: "codex",
-  CURSOR: "cursor"
-};
-
-export const DESKTOP_AUTOMATION_MODES = {
+export const CODEX_AUTOMATION_MODES = {
   OPEN: "open",
   FOCUS: "focus",
   PASTE: "paste",
   SEND: "send",
   SCREENSHOT: "screenshot"
-};
-
-const TARGET_APP_CONFIG = {
-  [AUTOMATION_TARGET_APPS.CODEX]: {
-    id: AUTOMATION_TARGET_APPS.CODEX,
-    displayName: "Codex",
-    launchCommandEnv: "CODEX_LAUNCH_COMMAND",
-    defaultLaunchCommand: DEFAULT_CODEX_LAUNCH_COMMAND
-  },
-  [AUTOMATION_TARGET_APPS.CURSOR]: {
-    id: AUTOMATION_TARGET_APPS.CURSOR,
-    displayName: "Cursor",
-    launchCommandEnv: "CURSOR_LAUNCH_COMMAND",
-    defaultLaunchCommand: ""
-  }
 };
 
 function toNumber(value, fallback) {
@@ -66,24 +46,11 @@ function sleep(ms) {
 }
 
 function resolveScreenshotDelayMs(mode, value) {
-  if (mode !== DESKTOP_AUTOMATION_MODES.PASTE && mode !== DESKTOP_AUTOMATION_MODES.SEND) {
+  if (mode !== CODEX_AUTOMATION_MODES.PASTE && mode !== CODEX_AUTOMATION_MODES.SEND) {
     return 0;
   }
 
   return toNonNegativeNumber(value, DEFAULT_SCREENSHOT_AFTER_ACTION_DELAY_MS);
-}
-
-function resolveTargetAppConfig(targetApp = AUTOMATION_TARGET_APPS.CODEX) {
-  const normalized = String(targetApp || "")
-    .trim()
-    .toLowerCase();
-  const config = TARGET_APP_CONFIG[normalized];
-
-  if (!config) {
-    throw new Error(`unsupported_target_app: ${targetApp}`);
-  }
-
-  return config;
 }
 
 function buildPowerShellArgs(scriptPath, params, { sta = false } = {}) {
@@ -247,33 +214,28 @@ export async function captureDesktopEvidence({
   };
 }
 
-async function minimizeAppWindow(targetApp) {
-  const config = resolveTargetAppConfig(targetApp);
+async function minimizeCodexWindow() {
   const payload = await runPowerShellScript(
-    MINIMIZE_WINDOW_SCRIPT_PATH,
-    { TargetApp: config.id },
+    MINIMIZE_CODEX_SCRIPT_PATH,
+    {},
     { timeoutMs: 5000, sta: true }
   );
 
   if (payload.status === "failed") {
-    throw new Error(payload.failureReason || `minimize_${config.id}_failed`);
+    throw new Error(payload.failureReason || "minimize_codex_failed");
   }
 
   return payload;
 }
 
-export async function runDesktopAutomation(targetApp, prompt, options = {}) {
-  const config = resolveTargetAppConfig(targetApp);
-  const launchCommand =
-    options.launchCommand ||
-    process.env[config.launchCommandEnv] ||
-    config.defaultLaunchCommand;
+export async function runCodexAutomation(prompt, options = {}) {
+  const launchCommand = options.launchCommand || process.env.CODEX_LAUNCH_COMMAND || DEFAULT_CODEX_LAUNCH_COMMAND;
   const timeoutMs = toNumber(
     options.timeoutMs || process.env.AUTOMATION_TIMEOUT_MS,
     DEFAULT_AUTOMATION_TIMEOUT_MS
   );
   const taskId = options.taskId || `task-${Date.now()}`;
-  const mode = options.mode || DESKTOP_AUTOMATION_MODES.SEND;
+  const mode = options.mode || CODEX_AUTOMATION_MODES.SEND;
   const screenshotDelayMs = resolveScreenshotDelayMs(
     mode,
     options.screenshotDelayMs ?? process.env.SCREENSHOT_AFTER_ACTION_DELAY_MS
@@ -288,8 +250,7 @@ export async function runDesktopAutomation(targetApp, prompt, options = {}) {
       {
         Prompt: prompt,
         LaunchCommand: launchCommand,
-        Mode: mode,
-        TargetApp: config.id
+        Mode: mode
       },
       {
         timeoutMs,
@@ -322,26 +283,21 @@ export async function runDesktopAutomation(targetApp, prompt, options = {}) {
   }
 
   try {
-    await minimizeAppWindow(config.id);
+    await minimizeCodexWindow();
   } catch (error) {
-    console.warn(`[automation] failed to minimize ${config.displayName} window: ${error.message}`);
+    console.warn(`[automation] failed to minimize Codex window: ${error.message}`);
   }
 
   const success = automation?.status === "success";
 
   return {
     success,
-    targetApp: config.id,
     mode,
     failureReason: success ? "" : automation?.failureReason || failureReason || "automation_failed",
     automation,
     screenshotPath: evidence?.screenshotPath || "",
     screenshotError
   };
-}
-
-export async function runCodexAutomation(prompt, options = {}) {
-  return runDesktopAutomation(AUTOMATION_TARGET_APPS.CODEX, prompt, options);
 }
 
 export function formatTimestamp(value) {

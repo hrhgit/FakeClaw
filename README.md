@@ -9,7 +9,7 @@
 
 ## 功能
 
-- 转发 VS Code、Cursor、Windsurf、Trae、Kiro、CodeBuddy、Antigravity、Zed、Codex、PowerShell 的 Windows 通知到 QQ
+- 转发 VS Code、Cursor、Windsurf、Trae、Kiro、CodeBuddy、Antigravity、JetBrains IDEs（含 AI Assistant / Junie）、Zed、Codex、PowerShell 的 Windows 通知到 QQ
 - 只允许白名单 QQ 私聊发送控制命令
 - 可远程让这台电脑上的 Codex 打开、聚焦、粘贴并发送提示词
 - 每次 Codex 任务结束后回传执行结果，并附带桌面截图

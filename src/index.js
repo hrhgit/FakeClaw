@@ -33,6 +33,7 @@ const DEFAULT_SOURCE_ALLOWLIST = [
   "Kiro",
   "CodeBuddy",
   "Antigravity",
+  "JetBrains",
   "Zed",
   "Codex",
   "PowerShell"
@@ -45,7 +46,7 @@ const IDE_HELP_SECTIONS = [
   },
   {
     label: "独立编辑器",
-    sources: ["Zed"]
+    sources: ["JetBrains", "Zed"]
   },
   {
     label: "自动化目标",
@@ -98,6 +99,12 @@ const IDE_HELP_DETAILS = {
     topic: "antigravity",
     displayName: "Antigravity",
     section: "VS Code 系",
+    capability: "通知转发"
+  },
+  JetBrains: {
+    topic: "jetbrains",
+    displayName: "JetBrains IDEs",
+    section: "独立编辑器",
     capability: "通知转发"
   },
   Zed: {
@@ -253,7 +260,31 @@ function normalizeSourceName(value) {
     return "Antigravity";
   }
 
-  if (compact === "zed" || compact.includes("zededitor")) {
+  if (
+    compact.includes("jetbrains") ||
+    compact.includes("junie") ||
+    compact.includes("aiassistant") ||
+    compact.includes("intellij") ||
+    compact.includes("pycharm") ||
+    compact.includes("webstorm") ||
+    compact.includes("goland") ||
+    compact.includes("clion") ||
+    compact.includes("rider") ||
+    compact.includes("androidstudio") ||
+    compact.includes("phpstorm") ||
+    compact.includes("rubymine") ||
+    compact.includes("dataspell") ||
+    compact.includes("fleet")
+  ) {
+    return "JetBrains";
+  }
+
+  if (
+    compact === "zed" ||
+    compact.includes("zededitor") ||
+    lower.includes("dev.zed.zed") ||
+    lower.includes("zed industries")
+  ) {
     return "Zed";
   }
 
@@ -268,6 +299,8 @@ function normalizeSourceName(value) {
   if (
     compact === "code" ||
     compact === "vscode" ||
+    compact === "vscodeinsiders" ||
+    compact === "codeinsiders" ||
     compact.includes("visualstudiocode")
   ) {
     return "Code";
@@ -426,6 +459,32 @@ function resolveHelpTopic(topic) {
 
   if (["codex-app", "codexapp", "codex-ide", "codexide"].includes(lower)) {
     return { kind: "ide-detail", sourceLabel: "Codex" };
+  }
+
+  if (
+    [
+      "jetbrains",
+      "junie",
+      "ai-assistant",
+      "aiassistant",
+      "jetbrains-ai",
+      "jetbrains-ai-assistant",
+      "intellij",
+      "idea",
+      "pycharm",
+      "webstorm",
+      "goland",
+      "clion",
+      "rider",
+      "android-studio",
+      "androidstudio",
+      "phpstorm",
+      "rubymine",
+      "dataspell",
+      "fleet"
+    ].includes(lower)
+  ) {
+    return { kind: "ide-detail", sourceLabel: "JetBrains" };
   }
 
   const sourceLabel = normalizeSourceName(rawTopic);
@@ -601,7 +660,7 @@ function buildHelpHomeMessage() {
     "",
     "IDE 分层入口:",
     "VS Code 系: /help code /help cursor /help windsurf /help trae /help kiro /help codebuddy /help antigravity",
-    "独立编辑器: /help zed",
+    "独立编辑器: /help jetbrains /help zed",
     "工具: /help codex-app /help powershell",
     "",
     "说明: /codex <prompt> 等同于 /codex send <prompt>；Codex 任务串行执行，不排队"
@@ -678,8 +737,11 @@ function buildIdeDetailNotes(sourceLabel, detail) {
     `- 会转发 ${detail.displayName} 的 Windows toast 到 QQ`,
     "- 该分层当前主要用于通知源说明，不会直接在该 IDE 内执行命令",
     "- 如果你想操作本地 Codex，请使用 /help codex",
+    sourceLabel === "JetBrains"
+      ? "- 包括 JetBrains AI Assistant / Junie，以及 IntelliJ IDEA、PyCharm、WebStorm 等宿主 IDE 的通知"
+      : null,
     enabledNote
-  ];
+  ].filter(Boolean);
 }
 
 function buildIdeDetailMessage(sourceLabel) {
@@ -717,6 +779,7 @@ function buildUnknownHelpMessage(topic) {
     "/help kiro",
     "/help codebuddy",
     "/help antigravity",
+    "/help jetbrains",
     "/help zed",
     "/help codex-app",
     "/help powershell"
