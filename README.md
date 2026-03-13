@@ -110,3 +110,7 @@ npm run dev
 - 不要提交真实 `.env`
 - 不要把 NapCat token、QQ 号、本机绝对路径写死进代码
 - 如果 token 已泄露，先在 NapCat 侧轮换后再使用
+
+## 调试笔记
+
+- [Codex Focus 调试经验](./docs/codex-focus-debugging-notes.md)
