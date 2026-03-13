@@ -1,0 +1,125 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Desktop Calibration</title>
+    <link rel="stylesheet" href="/calibration/styles.css" />
+  </head>
+  <body>
+    <main class="page">
+      <section class="hero">
+        <div>
+          <p class="eyebrow">Desktop Calibration</p>
+          <h1>桌面输入框校准台</h1>
+          <p class="warning-banner">
+            脚本运行期间不要操作目标 IDE 窗口。分析或试跑结束后，脚本会自动收起该窗口。
+          </p>
+          <p class="lead">
+            扫描当前 IDE 窗口，预览候选输入区，试跑候选配置，再决定是否写回正式配置。
+          </p>
+        </div>
+        <div class="hero-meta">
+          <div class="meta-card">
+            <span class="meta-label">API</span>
+            <strong id="config-path">loading...</strong>
+          </div>
+          <div class="meta-card">
+            <span class="meta-label">目标</span>
+            <strong id="target-count">-</strong>
+          </div>
+        </div>
+      </section>
+
+      <section class="panel controls">
+        <div class="control-grid">
+          <label class="field">
+            <span>目标应用</span>
+            <select id="target-app"></select>
+          </label>
+          <label class="field">
+            <span>候选数量</span>
+            <input id="top-count" type="number" min="1" max="20" value="8" />
+          </label>
+          <label class="field inline">
+            <input id="open-if-missing" type="checkbox" />
+            <span>分析时如果没开，尝试拉起应用</span>
+          </label>
+        </div>
+        <div class="actions">
+          <button id="analyze-btn" class="primary">Analyze</button>
+          <button id="load-saved-btn" class="ghost">载入当前保存配置</button>
+        </div>
+        <p id="status-line" class="status-line">等待分析。</p>
+      </section>
+
+      <section class="workspace">
+        <section class="panel summary">
+          <div class="panel-head">
+            <h2>分析摘要</h2>
+          </div>
+          <div id="summary-content" class="summary-grid"></div>
+        </section>
+
+        <section class="panel candidates">
+          <div class="panel-head">
+            <h2>候选选项</h2>
+            <span id="candidate-count" class="pill">0</span>
+          </div>
+          <div id="candidate-list" class="candidate-list">
+            <p class="empty">先运行 Analyze。</p>
+          </div>
+        </section>
+
+        <section class="panel editor">
+          <div class="panel-head">
+            <h2>当前草稿配置 / 试跑结果</h2>
+            <div class="panel-head-actions">
+              <span id="draft-badge" class="pill muted">未选择</span>
+              <span id="result-badge" class="pill muted">未运行</span>
+            </div>
+          </div>
+          <label class="stack-field">
+            <span>composerSearch</span>
+            <textarea id="composer-json" spellcheck="false"></textarea>
+          </label>
+          <label class="stack-field">
+            <span>clickFallback</span>
+            <textarea id="click-fallback-json" spellcheck="false"></textarea>
+          </label>
+          <div class="control-grid test-grid">
+            <label class="field">
+              <span>试跑模式</span>
+              <select id="test-mode">
+                <option value="paste" selected>paste</option>
+                <option value="focus">focus</option>
+              </select>
+            </label>
+            <label class="field test-prompt-field">
+              <span>测试提示词</span>
+              <input
+                id="test-prompt"
+                type="text"
+                value="[calibration] test paste"
+                placeholder="paste 模式会把这段文本粘贴进输入框"
+              />
+            </label>
+          </div>
+          <div class="actions">
+            <button id="test-btn" class="primary">试跑</button>
+            <button id="save-btn" class="accent">保存到配置文件</button>
+          </div>
+          <div class="result-block">
+            <div class="panel-head result-head">
+              <h3>结果</h3>
+              <span id="result-label" class="result-label neutral">未运行</span>
+            </div>
+            <pre id="result-output" class="code-block">暂无结果。</pre>
+          </div>
+        </section>
+      </section>
+    </main>
+
+    <script type="module" src="/calibration/app.js"></script>
+  </body>
+</html>

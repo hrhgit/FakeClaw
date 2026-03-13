@@ -1,0 +1,98 @@
+﻿{
+    "shared":  {
+                   "zones":  {
+                                 "rightStartRatio":  0.58,
+                                 "mainPaneStartRatio":  0.12,
+                                 "mainPaneStartMinPx":  160,
+                                 "lowerStartRatio":  0.65,
+                                 "rightBottomStartRatio":  0.45,
+                                 "rootLikeWidthRatio":  0.95,
+                                 "rootLikeHeightRatio":  0.5
+                             },
+                   "genericInput":  {
+                                        "minWidthPx":  20,
+                                        "minHeightPx":  8,
+                                        "largeEditorMinWidthRatio":  0.1,
+                                        "largeEditorMinWidthPx":  140,
+                                        "largeEditorMinHeightPx":  24,
+                                        "largeEditorMaxHeightRatio":  0.35,
+                                        "largeEditorMaxHeightPx":  240
+                                    }
+               },
+    "targets":  {
+                    "codex":  {
+                                  "composerSearch":  {
+                                                         "minWidthRatio":  0.195,
+                                                         "minWidthPx":  405,
+                                                         "minHeightPx":  28,
+                                                         "maxHeightRatio":  0.16,
+                                                         "maxHeightPx":  143,
+                                                         "minLeftRatio":  0.285,
+                                                         "minLeftPx":  627,
+                                                         "minTopRatio":  0.714
+                                                     }
+                              },
+                    "cursor":  {
+                                   "composerSearch":  {
+                                                          "minWidthRatio":  0.1,
+                                                          "minWidthPx":  140,
+                                                          "maxWidthRatio":  0.48,
+                                                          "maxWidthPx":  520,
+                                                          "minHeightPx":  20,
+                                                          "maxHeightRatio":  0.35,
+                                                          "maxHeightPx":  260,
+                                                          "minLeftRatio":  0.58,
+                                                          "minTopRatio":  0.45
+                                                      }
+                               },
+                    "trae":  {
+                                 "composerSearch":  {
+                                                        "minWidthRatio":  0.108,
+                                                        "minWidthPx":  218,
+                                                        "maxWidthRatio":  0.305,
+                                                        "maxWidthPx":  634,
+                                                        "minHeightPx":  25,
+                                                        "maxHeightRatio":  0.134,
+                                                        "maxHeightPx":  125,
+                                                        "minLeftRatio":  0.649,
+                                                        "minTopRatio":  0.698
+                                                    }
+                             },
+                    "codebuddy":  {
+                                      "composerSearch":  {
+                                                             "minWidthRatio":  0.1,
+                                                             "minWidthPx":  140,
+                                                             "maxWidthRatio":  0.48,
+                                                             "maxWidthPx":  520,
+                                                             "minHeightPx":  20,
+                                                             "maxHeightRatio":  0.35,
+                                                             "maxHeightPx":  260,
+                                                             "minLeftRatio":  0.58,
+                                                             "minTopRatio":  0.45
+                                                         },
+                                      "clickFallback":  {
+                                                            "xRatio":  0.853,
+                                                            "yRatio":  0.84,
+                                                            "gridEnabled":  1,
+                                                            "gridStepXPx":  12,
+                                                            "gridStepYPx":  10,
+                                                            "widthPx":  24,
+                                                            "heightPx":  24
+                                                        }
+                                  },
+                    "antigravity":  {
+                                        "composerSearch":  {
+                                                               "minWidthRatio":  0.093,
+                                                               "minWidthPx":  180,
+                                                               "maxWidthRatio":  0.286,
+                                                               "maxWidthPx":  523,
+                                                               "minHeightRatio":  0.023,
+                                                               "minHeightPx":  24,
+                                                               "maxHeightRatio":  0.098,
+                                                               "maxHeightPx":  103,
+                                                               "minLeftRatio":  0.7,
+                                                               "minTopRatio":  0.772
+                                                           }
+                                    }
+                }
+}

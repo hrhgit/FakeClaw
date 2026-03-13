@@ -12,11 +12,14 @@ import path, { basename } from "node:path";
 import { createInterface } from "node:readline";
 import { fileURLToPath } from "node:url";
 import {
-  CODEX_AUTOMATION_MODES,
+  AUTOMATION_TARGET_APPS,
+  DESKTOP_AUTOMATION_MODES,
   captureDesktopEvidence,
   formatTimestamp,
-  runCodexAutomation
+  listAutomationTargetConfigs,
+  runDesktopAutomation
 } from "./automation.js";
+import { startCalibrationWebServer } from "./calibration-web.js";
 import { createImageSegment, createTextSegment, NapCatClient } from "./napcat-client.js";
 
 const __filename = fileURLToPath(import.meta.url);
@@ -24,6 +27,10 @@ const __dirname = path.dirname(__filename);
 
 const MENU_COMMAND_ZH = "\u83dc\u5355";
 const STATUS_COMMAND_ZH = "\u72b6\u6001";
+const AUTOMATION_TARGET_CONFIGS = listAutomationTargetConfigs();
+const AUTOMATION_TARGET_DISPLAY_NAMES = Object.fromEntries(
+  AUTOMATION_TARGET_CONFIGS.map(({ id, displayName }) => [id, displayName])
+);
 
 const DEFAULT_SOURCE_ALLOWLIST = [
   "Code",
@@ -50,7 +57,7 @@ const IDE_HELP_SECTIONS = [
   },
   {
     label: "自动化目标",
-    sources: ["Codex"]
+    sources: ["Codex", "Cursor", "Trae", "CodeBuddy", "Antigravity"]
   },
   {
     label: "终端工具",
@@ -61,71 +68,154 @@ const IDE_HELP_SECTIONS = [
 const IDE_HELP_DETAILS = {
   Code: {
     topic: "code",
+    aliases: ["code"],
     displayName: "VS Code",
     section: "VS Code 系",
     capability: "通知转发"
   },
   Cursor: {
-    topic: "cursor",
+    topic: "cursor-app",
+    aliases: ["cursor-app", "cursorapp", "cursor-ide", "cursoride"],
     displayName: "Cursor",
-    section: "VS Code 系",
-    capability: "通知转发"
+    section: "自动化目标",
+    capability: "通知转发 + 本地自动化目标"
   },
   Windsurf: {
     topic: "windsurf",
+    aliases: ["windsurf"],
     displayName: "Windsurf",
     section: "VS Code 系",
     capability: "通知转发"
   },
   Trae: {
     topic: "trae",
+    aliases: ["trae"],
     displayName: "Trae",
-    section: "VS Code 系",
-    capability: "通知转发"
+    section: "自动化目标",
+    capability: "通知转发 + 本地自动化目标"
   },
   Kiro: {
     topic: "kiro",
+    aliases: ["kiro"],
     displayName: "Kiro",
     section: "VS Code 系",
     capability: "通知转发"
   },
   CodeBuddy: {
     topic: "codebuddy",
+    aliases: ["codebuddy"],
     displayName: "CodeBuddy",
     section: "VS Code 系",
-    capability: "通知转发"
+    capability: "通知转发 + 本地自动化目标"
   },
   Antigravity: {
-    topic: "antigravity",
+    topic: "antigravity-app",
+    aliases: [
+      "antigravity-app",
+      "antigravityapp",
+      "antigravity-ide",
+      "antigravityide"
+    ],
     displayName: "Antigravity",
-    section: "VS Code 系",
-    capability: "通知转发"
+    section: "自动化目标",
+    capability: "通知转发 + 本地自动化目标"
   },
   JetBrains: {
     topic: "jetbrains",
+    aliases: [
+      "jetbrains",
+      "junie",
+      "ai-assistant",
+      "aiassistant",
+      "jetbrains-ai",
+      "jetbrains-ai-assistant",
+      "intellij",
+      "idea",
+      "pycharm",
+      "webstorm",
+      "goland",
+      "clion",
+      "rider",
+      "android-studio",
+      "androidstudio",
+      "phpstorm",
+      "rubymine",
+      "dataspell",
+      "fleet"
+    ],
     displayName: "JetBrains IDEs",
     section: "独立编辑器",
     capability: "通知转发"
   },
   Zed: {
     topic: "zed",
+    aliases: ["zed"],
     displayName: "Zed",
     section: "独立编辑器",
     capability: "通知转发"
   },
   Codex: {
     topic: "codex-app",
+    aliases: ["codex-app", "codexapp", "codex-ide", "codexide"],
     displayName: "Codex",
     section: "自动化目标",
     capability: "通知转发 + 本地自动化目标"
   },
   PowerShell: {
     topic: "powershell",
+    aliases: ["powershell"],
     displayName: "PowerShell",
     section: "终端工具",
     capability: "通知转发"
   }
 };
+
+const AUTOMATION_TARGET_CONFIGS_BY_ID = Object.fromEntries(
+  AUTOMATION_TARGET_CONFIGS.map((config) => [config.id, config])
+);
+const AUTOMATION_TARGET_CONFIGS_BY_SOURCE = Object.fromEntries(
+  AUTOMATION_TARGET_CONFIGS.map((config) => [config.displayName, config])
+);
+const AUTOMATION_COMMAND_SPECS = [
+  {
+    token: "open",
+    mode: DESKTOP_AUTOMATION_MODES.OPEN,
+    expectsPrompt: false
+  },
+  {
+    token: "focus",
+    mode: DESKTOP_AUTOMATION_MODES.FOCUS,
+    expectsPrompt: false
+  },
+  {
+    token: "screenshot",
+    aliases: ["shot"],
+    mode: DESKTOP_AUTOMATION_MODES.SCREENSHOT,
+    expectsPrompt: false
+  },
+  {
+    token: "paste",
+    mode: DESKTOP_AUTOMATION_MODES.PASTE,
+    expectsPrompt: true
+  },
+  {
+    token: "send",
+    mode: DESKTOP_AUTOMATION_MODES.SEND,
+    expectsPrompt: true
+  }
+];
+const AUTOMATION_TARGET_MATCH_PATTERN = AUTOMATION_TARGET_CONFIGS.map(({ id }) => escapeRegex(id)).join("|");
+const IDE_HELP_TOPIC_ALIASES = new Map(
+  Object.entries(IDE_HELP_DETAILS).flatMap(([sourceLabel, detail]) =>
+    (detail.aliases || [detail.topic]).map((alias) => [String(alias).toLowerCase(), sourceLabel])
+  )
+);
+const AVAILABLE_HELP_TOPICS = [
+  "/help",
+  "/help ide",
+  ...AUTOMATION_TARGET_CONFIGS.map(({ id }) => `/help ${id}`),
+  ...Object.values(IDE_HELP_DETAILS).map(({ topic }) => `/help ${topic}`)
+].filter((value, index, values) => values.indexOf(value) === index);
 
 const DEDUPE_WINDOW_MS = Number(process.env.NOTIFY_DEDUPE_WINDOW_MS || 10000);
 const LISTENER_RESTART_MS = Number(process.env.LISTENER_RESTART_MS || 3000);
@@ -139,6 +229,7 @@ const SOURCE_ALLOWLIST = parseCsv(
 const AUTOMATION_TIMEOUT_MS = Number(process.env.AUTOMATION_TIMEOUT_MS || 30000);
 const SCREENSHOT_DIR = process.env.SCREENSHOT_DIR || "";
 const SCREENSHOT_RETENTION = Number(process.env.SCREENSHOT_RETENTION || 20);
+const CALIBRATION_WEB_ENABLED = process.env.CALIBRATION_WEB_ENABLED !== "false";
 
 const qqUserId = process.env.QQ_USER_ID || "";
 const wsUrl = process.env.NAPCAT_WS_URL || "ws://127.0.0.1:3001";
@@ -156,6 +247,63 @@ let qqTargetWarningShown = false;
 let instanceLockFd;
 let taskCounter = 0;
 let currentTask = null;
+let calibrationWebServer;
+
+function getTargetDisplayName(targetApp) {
+  return AUTOMATION_TARGET_DISPLAY_NAMES[targetApp] || String(targetApp || "").trim() || "Unknown";
+}
+
+function escapeRegex(value) {
+  return String(value || "").replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function buildAutomationCommandLine(targetApp, commandSpec, promptText = "") {
+  const parts = [`/${targetApp}`, commandSpec.token];
+
+  if (commandSpec.expectsPrompt && promptText) {
+    parts.push(promptText);
+  }
+
+  return parts.join(" ");
+}
+
+function getAutomationHomeCommandLines(targetApp) {
+  return [
+    `/${targetApp} <prompt>`,
+    ...AUTOMATION_COMMAND_SPECS.map((commandSpec) =>
+      buildAutomationCommandLine(targetApp, commandSpec, commandSpec.expectsPrompt ? "<prompt>" : "")
+    )
+  ];
+}
+
+function getAutomationUsageCommandLines(targetApp) {
+  return [
+    ...AUTOMATION_COMMAND_SPECS.map((commandSpec) =>
+      buildAutomationCommandLine(
+        targetApp,
+        commandSpec,
+        commandSpec.expectsPrompt ? "this is a test prompt" : ""
+      )
+    ),
+    `/${targetApp} <prompt>`
+  ];
+}
+
+function getAutomationActionSummary(targetApp) {
+  const tokens = AUTOMATION_COMMAND_SPECS.map(({ token }) => token).join("|");
+  return `/${targetApp} <prompt>、/${targetApp} ${tokens}`;
+}
+
+function getIdeHelpSectionSummaryLines() {
+  return IDE_HELP_SECTIONS.map((section) => {
+    const topics = section.sources
+      .map((sourceLabel) => IDE_HELP_DETAILS[sourceLabel]?.topic)
+      .filter(Boolean)
+      .map((topic) => `/help ${topic}`);
+
+    return topics.length ? `${section.label}: ${topics.join(" ")}` : null;
+  }).filter(Boolean);
+}
 
 function isProcessAlive(pid) {
   if (!Number.isInteger(pid) || pid <= 0) {
@@ -453,38 +601,12 @@ function resolveHelpTopic(topic) {
     return { kind: "ide-list" };
   }
 
-  if (lower === "codex") {
-    return { kind: "codex" };
+  if (AUTOMATION_TARGET_CONFIGS_BY_ID[lower]) {
+    return { kind: "automation-usage", targetApp: lower };
   }
 
-  if (["codex-app", "codexapp", "codex-ide", "codexide"].includes(lower)) {
-    return { kind: "ide-detail", sourceLabel: "Codex" };
-  }
-
-  if (
-    [
-      "jetbrains",
-      "junie",
-      "ai-assistant",
-      "aiassistant",
-      "jetbrains-ai",
-      "jetbrains-ai-assistant",
-      "intellij",
-      "idea",
-      "pycharm",
-      "webstorm",
-      "goland",
-      "clion",
-      "rider",
-      "android-studio",
-      "androidstudio",
-      "phpstorm",
-      "rubymine",
-      "dataspell",
-      "fleet"
-    ].includes(lower)
-  ) {
-    return { kind: "ide-detail", sourceLabel: "JetBrains" };
+  if (IDE_HELP_TOPIC_ALIASES.has(lower)) {
+    return { kind: "ide-detail", sourceLabel: IDE_HELP_TOPIC_ALIASES.get(lower) };
   }
 
   const sourceLabel = normalizeSourceName(rawTopic);
@@ -504,9 +626,9 @@ function isManagedCommandText(text) {
     lower === "/shot" ||
     lower === "/screenshot" ||
     parseHelpCommand(trimmed) !== null ||
+    parseAutomationCommand(trimmed) !== null ||
     lower === "/status" ||
-    trimmed === STATUS_COMMAND_ZH ||
-    lower.startsWith("/codex")
+    trimmed === STATUS_COMMAND_ZH
   );
 }
 
@@ -540,32 +662,38 @@ function createTask(mode, prompt, sourceUserId, targetApp = "Codex") {
 
 function formatModeLabel(mode) {
   switch (mode) {
-    case CODEX_AUTOMATION_MODES.OPEN:
+    case DESKTOP_AUTOMATION_MODES.OPEN:
       return "open";
-    case CODEX_AUTOMATION_MODES.FOCUS:
+    case DESKTOP_AUTOMATION_MODES.FOCUS:
       return "focus";
-    case CODEX_AUTOMATION_MODES.PASTE:
+    case DESKTOP_AUTOMATION_MODES.PASTE:
       return "paste";
-    case CODEX_AUTOMATION_MODES.SCREENSHOT:
+    case DESKTOP_AUTOMATION_MODES.SCREENSHOT:
       return "screenshot";
     default:
       return "send";
   }
 }
 
-function parseCodexCommand(text) {
-  const trimmed = text.trim();
-  const match = trimmed.match(/^\/codex\b([\s\S]*)$/i);
+function parseAutomationCommand(text) {
+  const trimmed = String(text || "").trim();
+  const match = AUTOMATION_TARGET_MATCH_PATTERN
+    ? trimmed.match(new RegExp(`^\\/(${AUTOMATION_TARGET_MATCH_PATTERN})\\b([\\s\\S]*)$`, "i"))
+    : null;
 
   if (!match) {
     return null;
   }
 
-  const body = match[1].trim();
+  const targetApp = String(match[1] || "")
+    .trim()
+    .toLowerCase();
+  const body = match[2].trim();
 
   if (!body || body.toLowerCase() === "help") {
     return {
-      mode: CODEX_AUTOMATION_MODES.SEND,
+      targetApp,
+      mode: DESKTOP_AUTOMATION_MODES.SEND,
       prompt: "",
       showUsage: true
     };
@@ -575,27 +703,19 @@ function parseCodexCommand(text) {
   const firstToken = firstTokenRaw.toLowerCase();
   const remainder = rest.join(" ").trim();
 
-  if (firstToken === "open") {
-    return { mode: CODEX_AUTOMATION_MODES.OPEN, prompt: "" };
+  const commandSpec = AUTOMATION_COMMAND_SPECS.find(({ token, aliases = [] }) =>
+    [token, ...aliases].includes(firstToken)
+  );
+
+  if (commandSpec) {
+    return {
+      targetApp,
+      mode: commandSpec.mode,
+      prompt: commandSpec.expectsPrompt ? remainder : ""
+    };
   }
 
-  if (firstToken === "focus") {
-    return { mode: CODEX_AUTOMATION_MODES.FOCUS, prompt: "" };
-  }
-
-  if (firstToken === "paste") {
-    return { mode: CODEX_AUTOMATION_MODES.PASTE, prompt: remainder };
-  }
-
-  if (firstToken === "send") {
-    return { mode: CODEX_AUTOMATION_MODES.SEND, prompt: remainder };
-  }
-
-  if (firstToken === "screenshot" || firstToken === "shot") {
-    return { mode: CODEX_AUTOMATION_MODES.SCREENSHOT, prompt: "" };
-  }
-
-  return { mode: CODEX_AUTOMATION_MODES.SEND, prompt: body };
+  return { targetApp, mode: DESKTOP_AUTOMATION_MODES.SEND, prompt: body };
 }
 
 function buildBusyRejectedMessage(task) {
@@ -606,7 +726,7 @@ function buildBusyRejectedMessage(task) {
     `mode: ${formatModeLabel(task.mode)}`,
     `startedAt: ${formatTimestamp(task.startedAt)}`,
     "finishedAt: -",
-    "failureReason: another Codex task is still running; no queue"
+    "failureReason: another automation task is still running; no queue"
   ].join("\n");
 }
 
@@ -615,7 +735,7 @@ function buildStatusMessage() {
     return [
       `${botName} status`,
       "state: idle",
-      "target: Codex"
+      `targets: ${AUTOMATION_TARGET_CONFIGS.map(({ displayName }) => displayName).join(", ")}`
     ].join("\n");
   }
 
@@ -636,57 +756,71 @@ function isSourceEnabled(sourceLabel) {
 }
 
 function buildHelpHomeMessage() {
-  return [
+  const lines = [
     `${botName} 帮助`,
     "总览:",
     "/help",
     "/help ide",
-    "/help codex",
+    ...AUTOMATION_TARGET_CONFIGS.map(({ id }) => `/help ${id}`),
     "/help <ide>",
     "",
     "通用命令:",
     "ping",
     `${MENU_COMMAND_ZH} / help / /help`,
     `/status / ${STATUS_COMMAND_ZH}`,
-    "",
-    "Codex 自动化:",
-    "/codex <prompt>",
-    "/codex open",
-    "/codex focus",
-    "/codex screenshot",
-    "/codex paste <prompt>",
-    "/codex send <prompt>",
     "/shot",
-    "",
+    ""
+  ];
+
+  for (const { id, displayName } of AUTOMATION_TARGET_CONFIGS) {
+    lines.push(`${displayName} 自动化:`);
+    lines.push(...getAutomationHomeCommandLines(id));
+    lines.push("");
+  }
+
+  lines.push(
     "IDE 分层入口:",
-    "VS Code 系: /help code /help cursor /help windsurf /help trae /help kiro /help codebuddy /help antigravity",
-    "独立编辑器: /help jetbrains /help zed",
-    "工具: /help codex-app /help powershell",
+    ...getIdeHelpSectionSummaryLines(),
     "",
-    "说明: /codex <prompt> 等同于 /codex send <prompt>；Codex 任务串行执行，不排队"
-  ].join("\n");
+    `说明: ${AUTOMATION_TARGET_CONFIGS.map(({ id }) => `/${id} <prompt>`).join("、")} 都等同于 send；任务串行执行，不排队`
+  );
+
+  return lines.join("\n");
 }
 
-function buildCodexUsage() {
-  return [
-    `${botName} Codex 帮助`,
+function buildAutomationUsage(targetApp) {
+  const displayName = getTargetDisplayName(targetApp);
+  const lines = [
+    `${botName} ${displayName} 帮助`,
     "命令:",
-    "/codex open",
-    "/codex focus",
-    "/codex screenshot",
-    "/codex paste this is a test prompt",
-    "/codex send this is a test prompt",
+    ...getAutomationUsageCommandLines(targetApp),
     "/shot",
     "",
     "说明:",
-    "/codex <prompt> == /codex send <prompt>",
+    `/${targetApp} <prompt> == /${targetApp} send <prompt>`,
     "仅允许白名单 QQ 私聊用户触发",
     "任务严格串行执行，忙时直接拒绝"
-  ].join("\n");
+  ];
+
+  if (
+    targetApp === AUTOMATION_TARGET_APPS.CURSOR ||
+    targetApp === AUTOMATION_TARGET_APPS.TRAE ||
+    targetApp === AUTOMATION_TARGET_APPS.TRAE_CN ||
+    targetApp === AUTOMATION_TARGET_APPS.CODEBUDDY ||
+    targetApp === AUTOMATION_TARGET_APPS.CODEBUDDY_CN ||
+    targetApp === AUTOMATION_TARGET_APPS.ANTIGRAVITY
+  ) {
+    lines.push(`当前 ${displayName} 流程默认尝试定位窗口右侧下方聊天输入框`);
+    lines.push("如果你把聊天面板移动到别处，focus/paste/send 可能会失败");
+  } else {
+    lines.push("Codex 流程优先匹配底部编辑器容器，再执行点击、粘贴和发送");
+  }
+
+  return lines.join("\n");
 }
 
 function buildIdeListHelpMessage() {
-  const lines = [`${botName} IDE 分层帮助`, "说明: 用 /help <ide> 查看单个 IDE 详情", ""];
+  const lines = [`${botName} IDE 分层帮助`, "说明: 用 /help <topic> 查看单个入口详情", ""];
 
   for (const section of IDE_HELP_SECTIONS) {
     lines.push(`${section.label}:`);
@@ -706,7 +840,9 @@ function buildIdeListHelpMessage() {
     lines.push("");
   }
 
-  lines.push("提示: Codex 是通知源，也是 /codex 命令的自动化目标");
+  lines.push(
+    `提示: ${AUTOMATION_TARGET_CONFIGS.map(({ displayName }) => displayName).join("、")} 既是通知源，也是远程自动化目标`
+  );
   return lines.join("\n");
 }
 
@@ -715,13 +851,30 @@ function buildIdeDetailNotes(sourceLabel, detail) {
     ? `- 当前已在 NOTIFY_SOURCE_ALLOWLIST 中启用 ${detail.displayName}`
     : `- 当前未启用 ${detail.displayName}；需要把它加入 NOTIFY_SOURCE_ALLOWLIST`;
 
-  if (sourceLabel === "Codex") {
-    return [
-      "- 会转发 Codex 桌面应用的 Windows 通知到 QQ",
-      "- 它同时是 /codex open|focus|paste|send 的本地自动化目标",
-      "- 查看命令细节可发送 /help codex",
-      enabledNote
+  const automationTarget = AUTOMATION_TARGET_CONFIGS_BY_SOURCE[sourceLabel];
+
+  if (automationTarget) {
+    const notes = [
+      `- 会转发 ${detail.displayName} 的 Windows 通知到 QQ`,
+      `- 它同时支持 ${getAutomationActionSummary(automationTarget.id)}`,
+      `- 查看命令细节可发送 /help ${automationTarget.id}`
     ];
+
+    if (
+      automationTarget.id === AUTOMATION_TARGET_APPS.CURSOR ||
+      automationTarget.id === AUTOMATION_TARGET_APPS.TRAE ||
+      automationTarget.id === AUTOMATION_TARGET_APPS.TRAE_CN ||
+      automationTarget.id === AUTOMATION_TARGET_APPS.CODEBUDDY ||
+      automationTarget.id === AUTOMATION_TARGET_APPS.CODEBUDDY_CN ||
+      automationTarget.id === AUTOMATION_TARGET_APPS.ANTIGRAVITY
+    ) {
+      notes.splice(2, 0, "- 当前自动化默认尝试命中右侧下方聊天输入框");
+    } else if (automationTarget.id === AUTOMATION_TARGET_APPS.CODEX) {
+      notes.splice(2, 0, "- 当前自动化会优先匹配底部编辑器容器后再执行输入和发送");
+    }
+
+    notes.push(enabledNote);
+    return notes;
   }
 
   if (sourceLabel === "PowerShell") {
@@ -736,7 +889,7 @@ function buildIdeDetailNotes(sourceLabel, detail) {
   return [
     `- 会转发 ${detail.displayName} 的 Windows toast 到 QQ`,
     "- 该分层当前主要用于通知源说明，不会直接在该 IDE 内执行命令",
-    "- 如果你想操作本地 Codex，请使用 /help codex",
+    `- 如果你想操作本地 ${AUTOMATION_TARGET_CONFIGS.map(({ displayName }) => displayName).join("、")}，请使用对应的 /help 命令`,
     sourceLabel === "JetBrains"
       ? "- 包括 JetBrains AI Assistant / Junie，以及 IntelliJ IDEA、PyCharm、WebStorm 等宿主 IDE 的通知"
       : null,
@@ -769,20 +922,7 @@ function buildUnknownHelpMessage(topic) {
     `${botName} 帮助`,
     `未识别主题: ${topic}`,
     "可用主题:",
-    "/help",
-    "/help ide",
-    "/help codex",
-    "/help code",
-    "/help cursor",
-    "/help windsurf",
-    "/help trae",
-    "/help kiro",
-    "/help codebuddy",
-    "/help antigravity",
-    "/help jetbrains",
-    "/help zed",
-    "/help codex-app",
-    "/help powershell"
+    ...AVAILABLE_HELP_TOPICS
   ].join("\n");
 }
 
@@ -790,8 +930,8 @@ function buildHelpMessage(helpCommand) {
   switch (helpCommand?.kind) {
     case "ide-list":
       return buildIdeListHelpMessage();
-    case "codex":
-      return buildCodexUsage();
+    case "automation-usage":
+      return buildAutomationUsage(helpCommand.targetApp);
     case "ide-detail":
       return buildIdeDetailMessage(helpCommand.sourceLabel);
     case "unknown":
@@ -875,12 +1015,12 @@ function handleActionFailed(error, meta) {
   );
 }
 
-async function executeCodexTask(event, mode, prompt) {
+async function executeAutomationTask(event, targetApp, mode, prompt) {
   const task = createTask(
     mode,
     prompt,
     event.user_id,
-    mode === CODEX_AUTOMATION_MODES.SCREENSHOT ? "Desktop" : "Codex"
+    mode === DESKTOP_AUTOMATION_MODES.SCREENSHOT ? "Desktop" : getTargetDisplayName(targetApp)
   );
   currentTask = task;
 
@@ -889,7 +1029,7 @@ async function executeCodexTask(event, mode, prompt) {
 
     let result;
 
-    if (mode === CODEX_AUTOMATION_MODES.SCREENSHOT) {
+    if (mode === DESKTOP_AUTOMATION_MODES.SCREENSHOT) {
       try {
         const evidence = await captureDesktopEvidence({
           taskId: task.taskId,
@@ -899,6 +1039,7 @@ async function executeCodexTask(event, mode, prompt) {
 
         result = {
           success: true,
+          targetApp,
           mode,
           failureReason: "",
           automation: null,
@@ -908,6 +1049,7 @@ async function executeCodexTask(event, mode, prompt) {
       } catch (error) {
         result = {
           success: false,
+          targetApp,
           mode,
           failureReason: error.message || "capture_desktop_failed",
           automation: null,
@@ -916,7 +1058,7 @@ async function executeCodexTask(event, mode, prompt) {
         };
       }
     } else {
-      result = await runCodexAutomation(prompt, {
+      result = await runDesktopAutomation(targetApp, prompt, {
         mode,
         taskId: task.taskId,
         timeoutMs: AUTOMATION_TIMEOUT_MS,
@@ -941,9 +1083,9 @@ async function executeCodexTask(event, mode, prompt) {
     }
 
     console.log(
-      `[task] completed ${task.taskId} mode=${formatModeLabel(task.mode)} status=${
-        result.success ? "success" : "failed"
-      } reason=${result.failureReason || "-"}`
+      `[task] completed ${task.taskId} target=${getTargetDisplayName(targetApp)} mode=${formatModeLabel(
+        task.mode
+      )} status=${result.success ? "success" : "failed"} reason=${result.failureReason || "-"}`
     );
   } catch (error) {
     const finishedAt = new Date().toISOString();
@@ -968,20 +1110,21 @@ async function executeCodexTask(event, mode, prompt) {
   }
 }
 
-function handleCodexCommand(event, command) {
+function handleAutomationCommand(event, command) {
   if (command.showUsage) {
-    sendPrivateText(event.user_id, buildCodexUsage()).catch((error) => {
-      console.error(`[command] failed to send codex usage: ${error.message}`);
+    sendPrivateText(event.user_id, buildAutomationUsage(command.targetApp)).catch((error) => {
+      console.error(`[command] failed to send automation usage: ${error.message}`);
     });
     return;
   }
 
   if (
-    (command.mode === CODEX_AUTOMATION_MODES.PASTE || command.mode === CODEX_AUTOMATION_MODES.SEND) &&
+    (command.mode === DESKTOP_AUTOMATION_MODES.PASTE ||
+      command.mode === DESKTOP_AUTOMATION_MODES.SEND) &&
     !command.prompt
   ) {
-    sendPrivateText(event.user_id, buildCodexUsage()).catch((error) => {
-      console.error(`[command] failed to send codex usage: ${error.message}`);
+    sendPrivateText(event.user_id, buildAutomationUsage(command.targetApp)).catch((error) => {
+      console.error(`[command] failed to send automation usage: ${error.message}`);
     });
     return;
   }
@@ -993,7 +1136,7 @@ function handleCodexCommand(event, command) {
     return;
   }
 
-  executeCodexTask(event, command.mode, command.prompt).catch((error) => {
+  executeAutomationTask(event, command.targetApp, command.mode, command.prompt).catch((error) => {
     console.error(`[task] failed to start task: ${error.message}`);
   });
 }
@@ -1025,17 +1168,18 @@ function handleAuthorizedCommand(event, text) {
   }
 
   if (lower === "/shot" || lower === "/screenshot") {
-    handleCodexCommand(event, {
-      mode: CODEX_AUTOMATION_MODES.SCREENSHOT,
+    handleAutomationCommand(event, {
+      targetApp: AUTOMATION_TARGET_APPS.CODEX,
+      mode: DESKTOP_AUTOMATION_MODES.SCREENSHOT,
       prompt: ""
     });
     return;
   }
 
-  const codexCommand = parseCodexCommand(trimmed);
+  const automationCommand = parseAutomationCommand(trimmed);
 
-  if (codexCommand) {
-    handleCodexCommand(event, codexCommand);
+  if (automationCommand) {
+    handleAutomationCommand(event, automationCommand);
   }
 }
 
@@ -1188,6 +1332,11 @@ function shutdown(signal) {
     listenerProcess.kill();
   }
 
+  if (calibrationWebServer) {
+    calibrationWebServer.close();
+    calibrationWebServer = undefined;
+  }
+
   client.close();
   releaseSingleInstanceLock();
   process.exit(0);
@@ -1220,6 +1369,12 @@ client.on("action-failed", handleActionFailed);
 process.on("exit", releaseSingleInstanceLock);
 process.on("SIGINT", () => shutdown("SIGINT"));
 process.on("SIGTERM", () => shutdown("SIGTERM"));
+
+if (CALIBRATION_WEB_ENABLED) {
+  calibrationWebServer = startCalibrationWebServer({
+    isAutomationBusy: () => currentTask !== null
+  });
+}
 
 client.connect();
 startToastListener();

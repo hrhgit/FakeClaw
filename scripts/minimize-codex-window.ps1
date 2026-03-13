@@ -1,4 +1,7 @@
-param()
+param(
+  [ValidateSet("codex", "cursor", "trae", "traecn", "codebuddy", "codebuddycn", "antigravity")]
+  [string]$TargetApp = "codex"
+)
 
 $ErrorActionPreference = "Stop"
 
@@ -6,7 +9,7 @@ Add-Type @"
 using System;
 using System.Runtime.InteropServices;
 
-public static class CodexWindowNative {
+public static class DesktopWindowNative {
   [DllImport("user32.dll")]
   public static extern bool ShowWindowAsync(IntPtr hWnd, int nCmdShow);
 
@@ -14,6 +17,69 @@ public static class CodexWindowNative {
   public static extern bool IsIconic(IntPtr hWnd);
 }
 "@
+
+function Get-TargetConfig {
+  switch ($TargetApp) {
+    "cursor" {
+      return @{
+        Id = "cursor"
+        DisplayName = "Cursor"
+        ProcessNames = @("Cursor")
+        TitleRegex = "Cursor"
+      }
+    }
+    "trae" {
+      return @{
+        Id = "trae"
+        DisplayName = "Trae"
+        ProcessNames = @("Trae")
+        TitleRegex = "Trae"
+      }
+    }
+    "traecn" {
+      return @{
+        Id = "traecn"
+        DisplayName = "Trae CN"
+        ProcessNames = @("Trae CN")
+        TitleRegex = "Trae"
+      }
+    }
+    "codebuddy" {
+      return @{
+        Id = "codebuddy"
+        DisplayName = "CodeBuddy"
+        ProcessNames = @("CodeBuddy")
+        TitleRegex = "CodeBuddy"
+      }
+    }
+    "codebuddycn" {
+      return @{
+        Id = "codebuddycn"
+        DisplayName = "CodeBuddy CN"
+        ProcessNames = @("CodeBuddy CN")
+        TitleRegex = "CodeBuddy"
+      }
+    }
+    "antigravity" {
+      return @{
+        Id = "antigravity"
+        DisplayName = "Antigravity"
+        ProcessNames = @("Antigravity")
+        TitleRegex = "Antigravity"
+      }
+    }
+    default {
+      return @{
+        Id = "codex"
+        DisplayName = "Codex"
+        ProcessNames = @("Codex")
+        TitleRegex = "Codex"
+      }
+    }
+  }
+}
+
+$targetConfig = Get-TargetConfig
 
 function Write-JsonResult {
   param(
@@ -25,18 +91,26 @@ function Write-JsonResult {
   $payload = @{
     status = $Status
     failureReason = $FailureReason
+    targetApp = $targetConfig.Id
+    targetDisplayName = $targetConfig.DisplayName
   } + $Data
 
   $payload | ConvertTo-Json -Compress -Depth 4
 }
 
-function Get-CodexProcess {
-  $candidates = Get-Process Codex -ErrorAction SilentlyContinue |
-    Where-Object { $_.MainWindowHandle -ne 0 } |
-    Sort-Object StartTime -Descending
+function Get-TargetProcess {
+  $candidates = foreach ($processName in $targetConfig.ProcessNames) {
+    Get-Process $processName -ErrorAction SilentlyContinue |
+      Where-Object { $_.MainWindowHandle -ne 0 }
+  }
 
-  foreach ($process in $candidates) {
-    if ($process.MainWindowTitle -match "Codex" -or [string]::IsNullOrWhiteSpace($process.MainWindowTitle)) {
+  $ordered = $candidates | Sort-Object StartTime -Descending
+
+  foreach ($process in $ordered) {
+    if (
+      $process.MainWindowTitle -match $targetConfig.TitleRegex -or
+      [string]::IsNullOrWhiteSpace($process.MainWindowTitle)
+    ) {
       return $process
     }
   }
@@ -45,7 +119,7 @@ function Get-CodexProcess {
 }
 
 try {
-  $process = Get-CodexProcess
+  $process = Get-TargetProcess
   if ($null -eq $process) {
     Write-Output (
       Write-JsonResult -Status "noop" -Data @{
@@ -68,9 +142,9 @@ try {
     exit 0
   }
 
-  $wasMinimized = [CodexWindowNative]::IsIconic($handle)
+  $wasMinimized = [DesktopWindowNative]::IsIconic($handle)
   if (-not $wasMinimized) {
-    [void][CodexWindowNative]::ShowWindowAsync($handle, 6)
+    [void][DesktopWindowNative]::ShowWindowAsync($handle, 6)
     Start-Sleep -Milliseconds 120
   }
 
