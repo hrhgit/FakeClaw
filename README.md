@@ -2,6 +2,14 @@
 
 一个运行在 Windows 上的 NapCat QQ 通知转发器，同时也是这台电脑上多种 IDE 的远程操作桥。
 
+## 主要功能
+
+- 把这台 Windows 机器上的 IDE、终端和桌面应用通知转发到指定 QQ，方便在离开电脑时继续看本机动静
+- 通过 QQ 私聊远程拉起本机 IDE，切换到目标窗口，并把提示词粘贴到聊天输入区
+- 支持按需只粘贴不发送，适合先远程准备提示词、再回到电脑上手动确认
+- 每次自动化任务结束后都会回传执行结果，并附带桌面截图，方便确认到底有没有命中正确窗口和输入区
+- 支持通过统一配置、校准脚本和本地校准网页修正不同机器、不同分辨率、不同 IDE 布局下的输入框定位问题
+
 ## 本次更新
 
 - 远程操作目标从原先的少数桌面应用扩展到 `Codex / Cursor / Trae / Trae CN / CodeBuddy / CodeBuddy CN / Antigravity`
@@ -11,19 +19,19 @@
 
 ## IDE 支持矩阵
 
-| IDE | 通知转发 | 远程 `open/focus` | 远程 `paste/send` | 截图 | 支持程度 / 备注 |
-| --- | --- | --- | --- | --- | --- |
-| Codex | 支持 | 支持 | 支持 | 支持 | 相对稳定 |
-| Cursor | 支持 | 支持 | 支持 | 支持 | 可用，建议校准后使用 |
-| Trae | 支持 | 支持 | 支持 | 支持 | 可用，建议校准后使用 |
-| Antigravity | 支持 | 支持 | 支持 | 支持 | 可用，建议校准后使用 |
-| CodeBuddy | 支持 | 支持 | 支持 | 支持 | 适配一般，依赖布局与兜底点击，建议保守使用 |
-| VS Code | 支持 | 不支持 | 不支持 | 不支持 | 仅通知转发 |
-| Windsurf | 支持 | 不支持 | 不支持 | 不支持 | 仅通知转发 |
-| Kiro | 支持 | 不支持 | 不支持 | 不支持 | 仅通知转发 |
-| JetBrains IDEs | 支持 | 不支持 | 不支持 | 不支持 | 仅通知转发，含 AI Assistant / Junie 及宿主 IDE |
-| Zed | 支持 | 不支持 | 不支持 | 不支持 | 仅通知转发 |
-| PowerShell | 支持 | 不支持 | 不支持 | 不支持 | 仅通知转发 |
+| IDE | 通知转发 | 远程操作 | 支持程度 / 备注 |
+| --- | --- | --- | --- |
+| Codex | 支持 | `open / focus / paste / send / screenshot` | 相对稳定 |
+| Cursor | 支持 | `open / focus / paste / send / screenshot` | 可用，建议校准后使用 |
+| Trae | 支持 | `open / focus / paste / send / screenshot` | 可用，建议校准后使用 |
+| Antigravity | 支持 | `open / focus / paste / send / screenshot` | 可用，建议校准后使用 |
+| CodeBuddy | 支持 | `open / focus / paste / send / screenshot` | 适配一般，依赖布局与兜底点击，建议保守使用 |
+| VS Code | 支持 | 不支持 | 仅通知转发 |
+| Windsurf | 支持 | 不支持 | 仅通知转发 |
+| Kiro | 支持 | 不支持 | 仅通知转发 |
+| JetBrains IDEs | 支持 | 不支持 | 仅通知转发，含 AI Assistant / Junie 及宿主 IDE |
+| Zed | 支持 | 不支持 | 仅通知转发 |
+| PowerShell | 支持 | 不支持 | 仅通知转发 |
 
 补充说明：
 
