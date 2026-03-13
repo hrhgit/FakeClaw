@@ -15,6 +15,7 @@ const DEFAULT_SCREENSHOT_DIR = path.join(os.tmpdir(), "fakeclaw-screenshots");
 const POWERSHELL_PATH = process.env.POWERSHELL_PATH || "powershell.exe";
 const AUTOMATION_SCRIPT_PATH = path.resolve(__dirname, "../scripts/codex-automation.ps1");
 const SCREENSHOT_SCRIPT_PATH = path.resolve(__dirname, "../scripts/capture-desktop-screenshot.ps1");
+const MINIMIZE_CODEX_SCRIPT_PATH = path.resolve(__dirname, "../scripts/minimize-codex-window.ps1");
 
 export const CODEX_AUTOMATION_MODES = {
   OPEN: "open",
@@ -213,6 +214,20 @@ export async function captureDesktopEvidence({
   };
 }
 
+async function minimizeCodexWindow() {
+  const payload = await runPowerShellScript(
+    MINIMIZE_CODEX_SCRIPT_PATH,
+    {},
+    { timeoutMs: 5000, sta: true }
+  );
+
+  if (payload.status === "failed") {
+    throw new Error(payload.failureReason || "minimize_codex_failed");
+  }
+
+  return payload;
+}
+
 export async function runCodexAutomation(prompt, options = {}) {
   const launchCommand = options.launchCommand || process.env.CODEX_LAUNCH_COMMAND || DEFAULT_CODEX_LAUNCH_COMMAND;
   const timeoutMs = toNumber(
@@ -265,6 +280,12 @@ export async function runCodexAutomation(prompt, options = {}) {
     });
   } catch (error) {
     screenshotError = error.message || "screenshot_failed";
+  }
+
+  try {
+    await minimizeCodexWindow();
+  } catch (error) {
+    console.warn(`[automation] failed to minimize Codex window: ${error.message}`);
   }
 
   const success = automation?.status === "success";

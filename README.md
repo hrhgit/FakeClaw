@@ -13,6 +13,7 @@
 - 只允许白名单 QQ 私聊发送控制命令
 - 可远程让这台电脑上的 Codex 打开、聚焦、粘贴并发送提示词
 - 每次 Codex 任务结束后回传执行结果，并附带桌面截图
+- QQ 触发 Codex 自动化后，会在截图流程结束后自动最小化 Codex 窗口
 - Codex 任务严格串行执行，忙碌时直接拒绝，不排队
 
 ## 依赖
@@ -102,6 +103,7 @@ npm run dev
 - `/codex open` 用于拉起 Codex
 - `/codex focus` 用于切到 Codex 窗口
 - `/codex screenshot` 或 `/shot` 用于回传当前桌面截图
+- 所有 `/codex` 自动化命令都会在截图完成后自动把 Codex 最小化，便于继续依赖 Codex 前端隐藏时的通知行为
 
 ## 安全说明
 
