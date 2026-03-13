@@ -1,112 +1,110 @@
-# AIassistant
+# FakeClaw
 
-A Windows-based NapCat QQ notification forwarder and Codex command bridge. It listens to Windows toast notifications from IDEs and tools such as VS Code, Cursor, Windsurf, Trae, Kiro, CodeBuddy, Antigravity, Zed, Codex, and PowerShell, forwards them to a target QQ account through the NapCat WebSocket API, and can accept QQ private commands to drive the local Codex desktop app.
+一个运行在 Windows 上的 NapCat QQ 通知转发器，同时也是本机 Codex 桌面应用的远程指令桥。
 
-## Features
+它做两件事：
 
-- Listen for Windows toast notifications
-- Filter notifications by source allowlist
-- Deduplicate repeated notifications in a short time window
-- Forward messages through the NapCat WebSocket API
-- Accept `/codex <prompt>` from a single QQ allowlist user
-- Enforce strict single-task execution for Codex automation
-- Capture and return a desktop screenshot after each Codex task
-- Provide batch scripts to start NapCat and the forwarder service
+1. 监听本机 Windows Toast 通知，并转发到指定 QQ。
+2. 接收指定 QQ 私聊命令，远程控制这台电脑上的 Codex。
 
-## Requirements
+## 功能
+
+- 转发 VS Code、Cursor、Windsurf、Trae、Kiro、CodeBuddy、Antigravity、Zed、Codex、PowerShell 的 Windows 通知到 QQ
+- 只允许白名单 QQ 私聊发送控制命令
+- 可远程让这台电脑上的 Codex 打开、聚焦、粘贴并发送提示词
+- 每次 Codex 任务结束后回传执行结果，并附带桌面截图
+- Codex 任务严格串行执行，忙碌时直接拒绝，不排队
+
+## 依赖
 
 - Windows
-- Node.js 22 or later
-- NapCat installed locally
-- Windows notification access enabled for the listener
+- Node.js 22+
+- 本机已安装并登录 NapCat
+- 已授予 Windows 通知读取权限
 
-## NapCat
+NapCat 项目：
 
-- Official repo: [NapNeko/NapCatQQ](https://github.com/NapNeko/NapCatQQ)
-- Windows download: [NapCatQQ Releases](https://github.com/NapNeko/NapCatQQ/releases)
+- [NapNeko/NapCatQQ](https://github.com/NapNeko/NapCatQQ)
+- [Windows Releases](https://github.com/NapNeko/NapCatQQ/releases)
 
-Simple setup:
+## 配置
 
-1. Download the Windows one-click package from the Releases page and extract it locally.
-2. Start NapCat once and log in to the QQ account used by the bot.
-3. Confirm the local WebSocket service is enabled, then copy the access token shown by NapCat.
-4. Set `NAPCAT_START_SCRIPT` to your local `napcat.bat` path.
-5. Set `NAPCAT_TOKEN` and `QQ_USER_ID` in `.env`.
-6. Keep `NAPCAT_WS_URL` as `ws://127.0.0.1:3001` unless your local NapCat uses a different port.
-
-## Setup
+安装依赖并创建配置文件：
 
 ```powershell
 npm install
 Copy-Item .env.example .env
 ```
 
-Edit `.env` and set at least these values:
+至少需要配置这些环境变量：
 
-- `NAPCAT_TOKEN`: NapCat access token
-- `NAPCAT_START_SCRIPT`: Local path to `napcat.bat`
-- `QQ_USER_ID`: QQ account that should receive forwarded notifications and send commands
-- `CODEX_LAUNCH_COMMAND`: Launch command for Codex if it is not already running
+- `NAPCAT_TOKEN`: NapCat WebSocket token
+- `NAPCAT_START_SCRIPT`: 本机 `napcat.bat` 的完整路径
+- `QQ_USER_ID`: 接收通知、也允许发送远程命令的 QQ 号
+- `CODEX_LAUNCH_COMMAND`: Codex 桌面应用启动命令，通常保持默认即可
 
-## Run
+常用可选项：
 
-Start only the forwarder service:
+- `NAPCAT_WS_URL`: 默认 `ws://127.0.0.1:3001`
+- `NOTIFY_SOURCE_ALLOWLIST`: 允许转发的通知来源
+- `AUTOMATION_TIMEOUT_MS`: 单次 Codex 自动化超时，默认 `30000`
+- `SCREENSHOT_DIR`: 截图输出目录
+
+示例：
+
+```env
+NAPCAT_WS_URL=ws://127.0.0.1:3001
+NAPCAT_TOKEN=your_napcat_token
+NAPCAT_START_SCRIPT=E:\path\to\napcat.bat
+QQ_USER_ID=your_qq_user_id
+CODEX_LAUNCH_COMMAND=shell:AppsFolder\OpenAI.Codex_2p2nqsd0c76g0!App
+```
+
+## 启动
+
+只启动转发服务：
 
 ```powershell
 start-app.bat
 ```
 
-Start both NapCat and the forwarder:
+先启动 NapCat，再启动本项目：
 
 ```powershell
 start-bot.bat
 ```
 
-Development mode:
+开发模式：
 
 ```powershell
 npm run dev
 ```
 
-## QQ Commands
+## 远程指令
 
-Only private messages from `QQ_USER_ID` can trigger commands.
+只有 `QQ_USER_ID` 对应的 QQ 私聊消息会被执行。
 
 - `ping`
-- `菜单` / `help`
-- `/status` / `状态`
+- `/status`
 - `/codex <prompt>`
+- `/codex send <prompt>`
+- `/codex paste <prompt>`
 - `/codex open`
 - `/codex focus`
 - `/codex screenshot`
-- `/codex paste <prompt>`
-- `/codex send <prompt>`
 - `/shot`
 
-`/codex <prompt>` is the same as `/codex send <prompt>`.
+其中：
 
-Codex tasks are strictly serialized. If one task is still running, the next `/codex` command is rejected immediately and is not queued.
+- `/codex <prompt>` 等同于 `/codex send <prompt>`
+- `/codex send <prompt>` 表示远程向这台电脑上的 Codex 发送一条指令
+- `/codex paste <prompt>` 只粘贴到输入框，不自动回车发送
+- `/codex open` 用于拉起 Codex
+- `/codex focus` 用于切到 Codex 窗口
+- `/codex screenshot` 或 `/shot` 用于回传当前桌面截图
 
-## Environment Variables
+## 安全说明
 
-| Variable | Description | Default |
-| --- | --- | --- |
-| `NAPCAT_WS_URL` | NapCat WebSocket endpoint | `ws://127.0.0.1:3001` |
-| `NAPCAT_TOKEN` | NapCat access token | empty |
-| `NAPCAT_START_SCRIPT` | Local path to the NapCat startup script | empty |
-| `BOT_NAME` | Bot display name used in responses | `NapCatBot` |
-| `QQ_USER_ID` | QQ account that receives notifications and can issue commands | empty |
-| `NOTIFY_SOURCE_ALLOWLIST` | Allowed notification sources | `Code,Cursor,Windsurf,Trae,Kiro,CodeBuddy,Antigravity,Zed,Codex,PowerShell` |
-| `NOTIFY_FILTER_MODE` | Reserved filter mode | `all` |
-| `NOTIFY_KEYWORDS` | Reserved keyword list, comma-separated | empty |
-| `CODEX_LAUNCH_COMMAND` | Launch command for Codex desktop | `shell:AppsFolder\OpenAI.Codex_2p2nqsd0c76g0!App` |
-| `AUTOMATION_TIMEOUT_MS` | Timeout for a single Codex task | `30000` |
-| `SCREENSHOT_DIR` | Optional screenshot output directory | system temp dir |
-| `SCREENSHOT_RETENTION` | Number of recent screenshots to retain | `20` |
-| `SCREENSHOT_AFTER_ACTION_DELAY_MS` | Delay before taking the post-task screenshot for `/codex paste` and `/codex send` | `1200` |
-
-## Privacy and Security
-
-- Do not commit a real `.env` file
-- Do not hardcode NapCat tokens, QQ IDs, or local absolute paths
-- If a token has already been exposed elsewhere, rotate it before reuse
+- 不要提交真实 `.env`
+- 不要把 NapCat token、QQ 号、本机绝对路径写死进代码
+- 如果 token 已泄露，先在 NapCat 侧轮换后再使用

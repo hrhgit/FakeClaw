@@ -1,6 +1,6 @@
 [CmdletBinding()]
 param(
-  [string]$Title = "AIassistant Test Notification",
+  [string]$Title = "FakeClaw Test Notification",
   [string]$Message = "This is a sample Windows toast sent from PowerShell.",
   [string]$SourceAppId = ""
 )

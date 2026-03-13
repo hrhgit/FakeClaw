@@ -52,7 +52,7 @@ echo [start] Launching NapCat in a separate window...
 start "NapCat" /d "%NAPCAT_DIR%" "%NAPCAT_SCRIPT%"
 
 echo [start] Launching notification forwarder in a separate window...
-start "AIassistant Service" /d "%~dp0" "%~dp0start-app.bat"
+start "FakeClaw Service" /d "%~dp0" "%~dp0start-app.bat"
 
 echo [done] Both windows were opened.
 echo [hint] The service window will keep retrying until NapCat websocket becomes available.

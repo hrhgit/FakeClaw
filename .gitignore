@@ -2,5 +2,7 @@ node_modules/
 .env
 .env.local
 .encoding-policy.json
+.aiassistant.lock
+.fakeclaw.lock
 scripts/bin/
 *.log

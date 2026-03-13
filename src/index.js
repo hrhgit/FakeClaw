@@ -138,7 +138,7 @@ const wsUrl = process.env.NAPCAT_WS_URL || "ws://127.0.0.1:3001";
 const token = process.env.NAPCAT_TOKEN || "";
 const botName = process.env.BOT_NAME || "NapCatBot";
 const listenerScriptPath = path.resolve(__dirname, "../scripts/windows-toast-listener.ps1");
-const instanceLockPath = path.resolve(__dirname, "../.aiassistant.lock");
+const instanceLockPath = path.resolve(__dirname, "../.fakeclaw.lock");
 
 const client = new NapCatClient({ wsUrl, token });
 const recentNotifications = new Map();
