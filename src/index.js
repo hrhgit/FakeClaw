@@ -9,7 +9,18 @@ import WebSocket from "ws";
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-const DEFAULT_SOURCE_ALLOWLIST = ["Code", "Cursor", "Windsurf", "Codex", "PowerShell"];
+const DEFAULT_SOURCE_ALLOWLIST = [
+  "Code",
+  "Cursor",
+  "Windsurf",
+  "Trae",
+  "Kiro",
+  "CodeBuddy",
+  "Antigravity",
+  "Zed",
+  "Codex",
+  "PowerShell"
+];
 const DEDUPE_WINDOW_MS = Number(process.env.NOTIFY_DEDUPE_WINDOW_MS || 10000);
 const LISTENER_RESTART_MS = Number(process.env.LISTENER_RESTART_MS || 3000);
 const POWERSHELL_PATH = process.env.POWERSHELL_PATH || "powershell.exe";
@@ -63,6 +74,26 @@ function normalizeSourceName(value) {
 
   if (lower.includes("windsurf")) {
     return "Windsurf";
+  }
+
+  if (lower.includes("trae")) {
+    return "Trae";
+  }
+
+  if (lower.includes("kiro")) {
+    return "Kiro";
+  }
+
+  if (lower.includes("codebuddy")) {
+    return "CodeBuddy";
+  }
+
+  if (lower.includes("antigravity")) {
+    return "Antigravity";
+  }
+
+  if (lower === "zed" || lower.includes("zed editor")) {
+    return "Zed";
   }
 
   if (lower.includes("codex")) {
