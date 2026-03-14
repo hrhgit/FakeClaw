@@ -10,13 +10,13 @@ set "LAUNCH_ENV_KEY="
 set "LAUNCH_COMMAND="
 
 if "%TARGET_APP%"=="" (
-  set /p "TARGET_APP=Target app [codex/cursor/trae/traecn/codebuddy/codebuddycn/antigravity] (default: antigravity): "
+  set /p "TARGET_APP=Target app [codex/vscode/cursor/trae/traecn/codebuddy/codebuddycn/antigravity] (default: antigravity): "
 )
 if "%TARGET_APP%"=="" set "TARGET_APP=antigravity"
 
-if /I not "%TARGET_APP%"=="codex" if /I not "%TARGET_APP%"=="cursor" if /I not "%TARGET_APP%"=="trae" if /I not "%TARGET_APP%"=="traecn" if /I not "%TARGET_APP%"=="codebuddy" if /I not "%TARGET_APP%"=="codebuddycn" if /I not "%TARGET_APP%"=="antigravity" (
+if /I not "%TARGET_APP%"=="codex" if /I not "%TARGET_APP%"=="vscode" if /I not "%TARGET_APP%"=="cursor" if /I not "%TARGET_APP%"=="trae" if /I not "%TARGET_APP%"=="traecn" if /I not "%TARGET_APP%"=="codebuddy" if /I not "%TARGET_APP%"=="codebuddycn" if /I not "%TARGET_APP%"=="antigravity" (
   echo [error] Invalid target app: %TARGET_APP%
-  echo [hint] Use one of: codex, cursor, trae, traecn, codebuddy, codebuddycn, antigravity
+  echo [hint] Use one of: codex, vscode, cursor, trae, traecn, codebuddy, codebuddycn, antigravity
   pause
   exit /b 1
 )
@@ -46,6 +46,7 @@ if errorlevel 1 (
 )
 
 if /I "%TARGET_APP%"=="codex" set "LAUNCH_ENV_KEY=CODEX_LAUNCH_COMMAND"
+if /I "%TARGET_APP%"=="vscode" set "LAUNCH_ENV_KEY=VSCODE_LAUNCH_COMMAND"
 if /I "%TARGET_APP%"=="cursor" set "LAUNCH_ENV_KEY=CURSOR_LAUNCH_COMMAND"
 if /I "%TARGET_APP%"=="trae" set "LAUNCH_ENV_KEY=TRAE_LAUNCH_COMMAND"
 if /I "%TARGET_APP%"=="traecn" set "LAUNCH_ENV_KEY=TRAE_CN_LAUNCH_COMMAND"

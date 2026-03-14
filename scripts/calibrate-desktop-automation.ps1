@@ -1,5 +1,5 @@
 param(
-  [ValidateSet("codex", "cursor", "trae", "traecn", "codebuddy", "codebuddycn", "antigravity")]
+  [ValidateSet("codex", "vscode", "cursor", "trae", "traecn", "codebuddy", "codebuddycn", "antigravity")]
   [string]$TargetApp,
   [ValidateSet("analyze", "calibrate")]
   [string]$Mode = "analyze",
@@ -49,6 +49,16 @@ if ([string]::IsNullOrWhiteSpace($ConfigPath)) {
 
 function Get-TargetConfig {
   switch ($TargetApp) {
+    "vscode" {
+      return @{
+        Id = "vscode"
+        DisplayName = "VS Code"
+        ProcessNames = @("Code", "Code - Insiders")
+        TitleRegex = "Visual Studio Code|VS Code|Code - Insiders"
+        PreferredZone = "rightBottom"
+        ConfigId = "vscode"
+      }
+    }
     "cursor" {
       return @{
         Id = "cursor"
@@ -343,6 +353,7 @@ function New-CandidateRecord {
 
   $looksLikeComposer = $descriptor -match "ProseMirror|composer|prompt|textarea|editor|input|chat|message|ask|agent|workflow|cursor-text"
   $looksLikeCodex = $className -match "(^| )ProseMirror( |$)"
+  $looksLikeVsCodeChat = $descriptor -match "chat|agent|assistant|copilot|cline|roo|continue|composer|prompt|message|ask|panel input"
   $isRootLikeSurface = $widthRatio -ge 0.9 -and $heightRatio -ge 0.75
 
   if (
@@ -402,6 +413,44 @@ function New-CandidateRecord {
       }
 
       if ($widthRatio -ge 0.2) {
+        $score += 120
+      }
+      break
+    }
+    "vscode" {
+      if ($typeName -eq "ControlType.Edit") {
+        $score += 220
+      }
+
+      if ($looksLikeVsCodeChat) {
+        $score += 360
+      }
+
+      if ($descriptor -match "copilot|assistant|cline|roo|continue") {
+        $score += 220
+      }
+
+      if ($leftRatio -ge 0.45) {
+        $score += 80
+      }
+
+      if ($leftRatio -ge 0.55) {
+        $score += 200
+      }
+
+      if ($topRatio -ge 0.4) {
+        $score += 90
+      }
+
+      if ($topRatio -ge 0.58) {
+        $score += 180
+      }
+
+      if ($rightGapRatio -le 0.12) {
+        $score += 120
+      }
+
+      if ($bottomGapRatio -le 0.15) {
         $score += 120
       }
       break
@@ -497,6 +546,19 @@ function Get-CalibratedComposerSearch {
         minLeftRatio = Round-Number (Clamp-Number ($leftRatio - 0.08) 0.03 0.6)
         minLeftPx = [int][Math]::Round([Math]::Max(80, $leftPx - 80))
         minTopRatio = Round-Number (Clamp-Number ($topRatio - 0.12) 0.35 0.9)
+      }
+    }
+    "vscode" {
+      return [ordered]@{
+        minWidthRatio = Round-Number (Clamp-Number ($widthRatio * 0.45) 0.06 0.72)
+        minWidthPx = [int][Math]::Round([Math]::Max(100, $widthPx * 0.45))
+        maxWidthRatio = Round-Number (Clamp-Number ([Math]::Max($widthRatio + 0.08, $widthRatio * 1.35)) 0.18 0.9)
+        maxWidthPx = [int][Math]::Round([Math]::Max(320, $widthPx * 1.45))
+        minHeightPx = [int][Math]::Round([Math]::Max(18, $heightPx * 0.5))
+        maxHeightRatio = Round-Number (Clamp-Number ([Math]::Max(0.14, $heightRatio * 2.8)) 0.14 0.5)
+        maxHeightPx = [int][Math]::Round([Math]::Max(110, $heightPx * 2.6))
+        minLeftRatio = Round-Number (Clamp-Number ($leftRatio - 0.08) 0.22 0.85)
+        minTopRatio = Round-Number (Clamp-Number ($topRatio - 0.1) 0.2 0.95)
       }
     }
     "antigravity" {

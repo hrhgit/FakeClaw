@@ -32,6 +32,19 @@
                                                          "minTopRatio":  0.714
                                                      }
                               },
+                    "vscode":  {
+                                   "composerSearch":  {
+                                                          "minWidthRatio":  0.08,
+                                                          "minWidthPx":  120,
+                                                          "maxWidthRatio":  0.56,
+                                                          "maxWidthPx":  640,
+                                                          "minHeightPx":  20,
+                                                          "maxHeightRatio":  0.4,
+                                                          "maxHeightPx":  280,
+                                                          "minLeftRatio":  0.52,
+                                                          "minTopRatio":  0.4
+                                                      }
+                               },
                     "cursor":  {
                                    "composerSearch":  {
                                                           "minWidthRatio":  0.1,

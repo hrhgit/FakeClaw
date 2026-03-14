@@ -22,7 +22,7 @@
 - 新增 `start-qq.bat`、`start-telegram.bat`、`start-feishu.bat`、`start-wecom.bat` 启动入口
 - 扩展 `.env.example`，补齐各平台机器人、回调地址和鉴权相关配置
 - 新增 [docs/messaging-platforms.md](./docs/messaging-platforms.md)，汇总各平台接入说明
-- 远程操作目标从原先的少数桌面应用扩展到 `Codex / Cursor / Trae / Trae CN / CodeBuddy / CodeBuddy CN / Antigravity`
+- 远程操作目标从原先的少数桌面应用扩展到 `Codex / VS Code / Cursor / Trae / Trae CN / CodeBuddy / CodeBuddy CN / Antigravity`
 - 统一了桌面自动化配置，布局阈值集中放在 [config/desktop-automation.config.json](./config/desktop-automation.config.json)
 - 新增桌面校准脚本和批处理入口，方便在不同机器上重新标定输入框位置
 - 新增本地校准网页，可在浏览器里分析候选输入区、试跑草稿配置并保存
@@ -48,12 +48,12 @@
 
 | IDE | 通知转发 | 远程操作 | 支持程度 / 备注 |
 | --- | --- | --- | --- |
-| Codex | 支持 | `open / focus / paste / send / screenshot` | 相对稳定 |
-| Cursor | 支持 | `open / focus / paste / send / screenshot` | 可用，建议校准后使用 |
-| Trae | 支持 | `open / focus / paste / send / screenshot` | 可用，建议校准后使用 |
-| Antigravity | 支持 | `open / focus / paste / send / screenshot` | 可用，建议校准后使用 |
-| CodeBuddy | 支持 | `open / focus / paste / send / screenshot` | 适配一般，依赖布局与兜底点击，建议保守使用 |
-| VS Code | 支持 | 不支持 | 仅通知转发 |
+| Codex | 支持 | `open / focus / minimize / paste / send / screenshot` | 相对稳定 |
+| Cursor | 支持 | `open / focus / minimize / paste / send / screenshot` | 可用，建议校准后使用 |
+| Trae | 支持 | `open / focus / minimize / paste / send / screenshot` | 可用，建议校准后使用 |
+| Antigravity | 支持 | `open / focus / minimize / paste / send / screenshot` | 可用，建议校准后使用 |
+| CodeBuddy | 支持 | `open / focus / minimize / paste / send / screenshot` | 适配一般，依赖布局与兜底点击，建议保守使用 |
+| VS Code | 支持 | `open / focus / minimize / paste / send / screenshot` | 可用，优先走 VS Code 专用规则，再回退到通用规则，建议校准后使用 |
 | Windsurf | 支持 | 不支持 | 仅通知转发 |
 | Kiro | 支持 | 不支持 | 仅通知转发 |
 | JetBrains IDEs | 支持 | 不支持 | 仅通知转发，含 AI Assistant / Junie 及宿主 IDE |
@@ -64,6 +64,7 @@
 
 - `Trae CN` 共享 `Trae` 的远程自动化能力与校准配置，命令目标为 `traecn`
 - `CodeBuddy CN` 共享 `CodeBuddy` 的远程自动化能力与校准配置，命令目标为 `codebuddycn`
+- `VS Code` 的通知来源仍归一化为 `Code`，远程命令目标为 `vscode`
 - 所有远程自动化任务都会串行执行；忙碌时会直接拒绝，不排队
 
 ## 快速开始
@@ -194,6 +195,7 @@ npm run dev
 ### 远程启动命令
 
 - `CODEX_LAUNCH_COMMAND`
+- `VSCODE_LAUNCH_COMMAND`
 - `CURSOR_LAUNCH_COMMAND`
 - `TRAE_LAUNCH_COMMAND`
 - `TRAE_CN_LAUNCH_COMMAND`
@@ -242,6 +244,7 @@ npm run dev
 可远程操作的目标为：
 
 - `codex`
+- `vscode`
 - `cursor`
 - `trae`
 - `traecn`
@@ -257,6 +260,7 @@ npm run dev
 /<target> paste <prompt>
 /<target> open
 /<target> focus
+/<target> minimize
 /<target> screenshot
 ```
 
@@ -264,15 +268,19 @@ npm run dev
 
 - `/<target> <prompt>` 等同于 `/<target> send <prompt>`
 - `send` 会粘贴并发送
+- `send` 成功后会自动最小化目标 IDE
 - `paste` 只粘贴，不自动回车
 - `open` 用于拉起目标 IDE
 - `focus` 会切到目标窗口，并尝试命中聊天输入区
-- `screenshot` 会回传当前桌面截图
+- `minimize` 只最小化目标 IDE
+- `screenshot` 会先打开或激活目标 IDE，再回传截图
+- `/shot` 仍然只回传当前桌面截图
 
 常用示例：
 
 ```text
 /codex 帮我检查最近一次改动的风险
+/vscode open
 /cursor open
 /trae paste 先别发送，我要手动确认
 /antigravity screenshot
@@ -319,6 +327,7 @@ calibrate-desktop-automation.bat antigravity calibrate y
 
 ```powershell
 powershell -File .\scripts\calibrate-desktop-automation.ps1 -TargetApp codex -Mode analyze
+powershell -File .\scripts\calibrate-desktop-automation.ps1 -TargetApp vscode -Mode analyze
 powershell -File .\scripts\calibrate-desktop-automation.ps1 -TargetApp cursor -Mode calibrate
 powershell -File .\scripts\calibrate-desktop-automation.ps1 -TargetApp trae -Mode analyze
 powershell -File .\scripts\calibrate-desktop-automation.ps1 -TargetApp traecn -Mode calibrate
@@ -331,13 +340,13 @@ powershell -File .\scripts\calibrate-desktop-automation.ps1 -TargetApp antigravi
 
 - `analyze` 只扫描当前窗口，输出候选输入区和推断配置
 - `calibrate` 会把推断出的 `composerSearch` 写回配置文件
-- `-TargetApp` 可用值：`codex|cursor|trae|traecn|codebuddy|codebuddycn|antigravity`
+- `-TargetApp` 可用值：`codex|vscode|cursor|trae|traecn|codebuddy|codebuddycn|antigravity`
 - 应用尚未打开时，可配合 `-OpenIfMissing -LaunchCommand <命令>` 使用
 
 ### 兼容性建议
 
 - `Codex`: 相对稳定，默认优先匹配底部编辑器容器
-- `Cursor / Trae / Trae CN / Antigravity`: 可用，但依赖聊天面板仍位于窗口右下区域，建议校准后使用
+- `VS Code / Cursor / Trae / Trae CN / Antigravity`: 可用，但依赖聊天面板仍位于窗口右下区域，建议校准后使用
 - `CodeBuddy / CodeBuddy CN`: 适配一般，除了候选匹配还依赖坐标兜底点击，建议保守使用
 
 ## 调试笔记
@@ -345,6 +354,7 @@ powershell -File .\scripts\calibrate-desktop-automation.ps1 -TargetApp antigravi
 - [消息平台接入说明](./docs/messaging-platforms.md)
 - [桌面 IDE 自动化通用经验](./docs/desktop-ide-automation-shared-notes.md)
 - [Codex Focus 调试经验](./docs/codex-focus-debugging-notes.md)
+- [VS Code Focus 调试经验](./docs/vscode-focus-debugging-notes.md)
 - [Cursor Focus 调试经验](./docs/cursor-focus-debugging-notes.md)
 - [CodeBuddy Focus 调试经验](./docs/codebuddy-focus-debugging-notes.md)
 - [Antigravity Focus 调试经验](./docs/antigravity-focus-debugging-notes.md)

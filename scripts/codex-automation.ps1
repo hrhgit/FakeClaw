@@ -2,7 +2,7 @@ param(
   [string]$Prompt = "",
   [string]$LaunchCommand = "",
   [string]$ConfigPath = "",
-  [ValidateSet("codex", "cursor", "trae", "traecn", "codebuddy", "codebuddycn", "antigravity")]
+  [ValidateSet("codex", "vscode", "cursor", "trae", "traecn", "codebuddy", "codebuddycn", "antigravity")]
   [string]$TargetApp = "codex",
   [ValidateSet("open", "focus", "paste", "send")]
   [string]$Mode = "send"
@@ -135,6 +135,16 @@ function Load-AutomationConfig {
 
 function Get-TargetConfig {
   switch ($TargetApp) {
+    "vscode" {
+      return @{
+        Id = "vscode"
+        DisplayName = "VS Code"
+        ProcessNames = @("Code", "Code - Insiders")
+        TitleRegex = "Visual Studio Code|VS Code|Code - Insiders"
+        PreferredZone = "rightBottom"
+        ConfigId = "vscode"
+      }
+    }
     "cursor" {
       return @{
         Id = "cursor"
@@ -947,6 +957,136 @@ function Find-CursorComposer {
   return ($candidates | Sort-Object Score -Descending | Select-Object -First 1)
 }
 
+function Find-VSCodeComposer {
+  param([System.Diagnostics.Process]$Process)
+
+  $root = Get-RootElement -Process $Process
+  if ($null -eq $root) {
+    return $null
+  }
+
+  $windowBounds = Get-WindowBounds -Process $Process -RootElement $root
+  if ($null -eq $windowBounds) {
+    return $null
+  }
+
+  $all = $root.FindAll([System.Windows.Automation.TreeScope]::Descendants, [System.Windows.Automation.Condition]::TrueCondition)
+  $candidates = @()
+
+  for ($index = 0; $index -lt $all.Count; $index += 1) {
+    $element = $all.Item($index)
+
+    if ($element.Current.IsOffscreen -or -not $element.Current.IsEnabled) {
+      continue
+    }
+
+    $typeName = [string]$element.Current.ControlType.ProgrammaticName
+    if ($typeName -notmatch "ControlType\.(Edit|Document|Group|Pane|Custom)$") {
+      continue
+    }
+
+    $bounds = Get-ElementBounds -Element $element
+    $minWidth =
+      Resolve-MinThreshold `
+        -Dimension $windowBounds.Width `
+        -Ratio (Get-TargetAutomationNumberSetting -Path @("composerSearch", "minWidthRatio") -Default 0.08) `
+        -MinPx (Get-TargetAutomationNumberSetting -Path @("composerSearch", "minWidthPx") -Default 120)
+    $minHeightPx = Get-TargetAutomationNumberSetting -Path @("composerSearch", "minHeightPx") -Default 20
+    $maxHeight =
+      Resolve-MaxThreshold `
+        -Dimension $windowBounds.Height `
+        -Ratio (Get-TargetAutomationNumberSetting -Path @("composerSearch", "maxHeightRatio") -Default 0.4) `
+        -MinMaxPx (Get-TargetAutomationNumberSetting -Path @("composerSearch", "maxHeightPx") -Default 280)
+    $minLeft = $windowBounds.Left + ($windowBounds.Width * (Get-TargetAutomationNumberSetting -Path @("composerSearch", "minLeftRatio") -Default 0.52))
+    $minTop = $windowBounds.Top + ($windowBounds.Height * (Get-TargetAutomationNumberSetting -Path @("composerSearch", "minTopRatio") -Default 0.4))
+    $maxWidth =
+      Resolve-MaxThreshold `
+        -Dimension $windowBounds.Width `
+        -Ratio (Get-TargetAutomationNumberSetting -Path @("composerSearch", "maxWidthRatio") -Default 0.56) `
+        -MinMaxPx (Get-TargetAutomationNumberSetting -Path @("composerSearch", "maxWidthPx") -Default 640)
+    if (
+      $bounds.Width -lt $minWidth -or
+      $bounds.Height -lt $minHeightPx -or
+      $bounds.Height -gt $maxHeight -or
+      $bounds.Left -lt $minLeft -or
+      $bounds.Top -lt $minTop
+    ) {
+      continue
+    }
+
+    if ($bounds.Width -gt $maxWidth) {
+      continue
+    }
+
+    $descriptor = Get-CandidateDescriptor -Element $element
+    if ($descriptor -match "Terminal input|xterm-helper-textarea|search|command palette|findinput|replaceinput") {
+      continue
+    }
+
+    $hasValuePattern = Test-PatternSupport -Element $element -Pattern ([System.Windows.Automation.ValuePattern]::Pattern)
+    $hasTextPattern = Test-PatternSupport -Element $element -Pattern ([System.Windows.Automation.TextPattern]::Pattern)
+    $looksLikeVsCodeChat =
+      $descriptor -match "chat|agent|assistant|copilot|cline|roo|continue|composer|prompt|message|ask|panel input"
+    $looksLikeEditableSurface =
+      $descriptor -match "textarea|input|editor|prosemirror" -or
+      $element.Current.IsKeyboardFocusable -or
+      $hasValuePattern -or
+      $hasTextPattern
+
+    if (-not $looksLikeVsCodeChat -and -not $looksLikeEditableSurface) {
+      continue
+    }
+
+    $score = 0
+
+    if ($looksLikeVsCodeChat) {
+      $score += 700
+    }
+
+    if ($descriptor -match "copilot|assistant|cline|roo|continue") {
+      $score += 260
+    }
+
+    if ($descriptor -match "textarea|input|editor|prosemirror") {
+      $score += 220
+    }
+
+    if ($element.Current.IsKeyboardFocusable) {
+      $score += 160
+    }
+
+    if ($hasValuePattern -or $hasTextPattern) {
+      $score += 180
+    }
+
+    switch -Regex ($typeName) {
+      "ControlType\.Edit$" { $score += 240; break }
+      "ControlType\.Document$" { $score += 180; break }
+      "ControlType\.(Group|Pane|Custom)$" { $score += 120; break }
+    }
+
+    $score += [int]($bounds.Width / 4)
+    $score += [int]($bounds.Height * 4)
+    $score += [int]($bounds.Left - $windowBounds.Left)
+    $score += [int]($bounds.Top - $windowBounds.Top)
+
+    $candidates += @{
+      Element = $element
+      TypeName = $typeName
+      ClassName = [string]$element.Current.ClassName
+      Score = $score
+      Bounds = $bounds
+      Name = [string]$element.Current.Name
+    }
+  }
+
+  if ($candidates.Count -eq 0) {
+    return $null
+  }
+
+  return ($candidates | Sort-Object Score -Descending | Select-Object -First 1)
+}
+
 function Find-AntigravityComposer {
   param([System.Diagnostics.Process]$Process)
 
@@ -1063,6 +1203,14 @@ function Find-PreferredComposer {
   param([System.Diagnostics.Process]$Process)
 
   switch ($targetConfig.Id) {
+    "vscode" {
+      $vscodeTarget = Find-VSCodeComposer -Process $Process
+      if ($null -ne $vscodeTarget) {
+        return $vscodeTarget
+      }
+
+      return Find-CursorComposer -Process $Process
+    }
     "cursor" {
       return Find-CursorComposer -Process $Process
     }

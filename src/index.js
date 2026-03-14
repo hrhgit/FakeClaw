@@ -17,6 +17,8 @@ import {
   captureDesktopEvidence,
   formatTimestamp,
   listAutomationTargetConfigs,
+  minimizeAutomationWindow,
+  runAutomationAction,
   runDesktopAutomation
 } from "./automation.js";
 import { startCalibrationWebServer } from "./calibration-web.js";
@@ -53,82 +55,46 @@ const DEFAULT_SOURCE_ALLOWLIST = [
   "PowerShell"
 ];
 
-const IDE_HELP_SECTIONS = [
-  {
-    label: "VS Code 系",
-    sources: ["Code", "Cursor", "Windsurf", "Trae", "Kiro", "CodeBuddy", "Antigravity"]
-  },
-  {
-    label: "独立编辑器",
-    sources: ["JetBrains", "Zed"]
-  },
-  {
-    label: "自动化目标",
-    sources: ["Codex", "Cursor", "Trae", "CodeBuddy", "Antigravity"]
-  },
-  {
-    label: "终端工具",
-    sources: ["PowerShell"]
-  }
-];
+const AUTOMATION_HELP_TOPIC_ALIASES = new Map([
+  ["codex", AUTOMATION_TARGET_APPS.CODEX],
+  ["codex-app", AUTOMATION_TARGET_APPS.CODEX],
+  ["codexapp", AUTOMATION_TARGET_APPS.CODEX],
+  ["codex-ide", AUTOMATION_TARGET_APPS.CODEX],
+  ["codexide", AUTOMATION_TARGET_APPS.CODEX],
+  ["vscode", AUTOMATION_TARGET_APPS.VSCODE],
+  ["code", AUTOMATION_TARGET_APPS.VSCODE],
+  ["vs-code", AUTOMATION_TARGET_APPS.VSCODE],
+  ["visual-studio-code", AUTOMATION_TARGET_APPS.VSCODE],
+  ["visualstudiocode", AUTOMATION_TARGET_APPS.VSCODE],
+  ["cursor", AUTOMATION_TARGET_APPS.CURSOR],
+  ["cursor-app", AUTOMATION_TARGET_APPS.CURSOR],
+  ["cursorapp", AUTOMATION_TARGET_APPS.CURSOR],
+  ["cursor-ide", AUTOMATION_TARGET_APPS.CURSOR],
+  ["cursoride", AUTOMATION_TARGET_APPS.CURSOR],
+  ["trae", AUTOMATION_TARGET_APPS.TRAE],
+  ["traecn", AUTOMATION_TARGET_APPS.TRAE_CN],
+  ["trae-cn", AUTOMATION_TARGET_APPS.TRAE_CN],
+  ["codebuddy", AUTOMATION_TARGET_APPS.CODEBUDDY],
+  ["codebuddycn", AUTOMATION_TARGET_APPS.CODEBUDDY_CN],
+  ["codebuddy-cn", AUTOMATION_TARGET_APPS.CODEBUDDY_CN],
+  ["antigravity", AUTOMATION_TARGET_APPS.ANTIGRAVITY],
+  ["antigravity-app", AUTOMATION_TARGET_APPS.ANTIGRAVITY],
+  ["antigravityapp", AUTOMATION_TARGET_APPS.ANTIGRAVITY],
+  ["antigravity-ide", AUTOMATION_TARGET_APPS.ANTIGRAVITY],
+  ["antigravityide", AUTOMATION_TARGET_APPS.ANTIGRAVITY]
+]);
 
-const IDE_HELP_DETAILS = {
-  Code: {
-    topic: "code",
-    aliases: ["code"],
-    displayName: "VS Code",
-    section: "VS Code 系",
-    capability: "通知转发"
-  },
-  Cursor: {
-    topic: "cursor-app",
-    aliases: ["cursor-app", "cursorapp", "cursor-ide", "cursoride"],
-    displayName: "Cursor",
-    section: "自动化目标",
-    capability: "通知转发 + 本地自动化目标"
-  },
+const NOTIFY_ONLY_HELP_DETAILS = {
   Windsurf: {
-    topic: "windsurf",
-    aliases: ["windsurf"],
     displayName: "Windsurf",
-    section: "VS Code 系",
-    capability: "通知转发"
-  },
-  Trae: {
-    topic: "trae",
-    aliases: ["trae"],
-    displayName: "Trae",
-    section: "自动化目标",
-    capability: "通知转发 + 本地自动化目标"
+    aliases: ["windsurf"]
   },
   Kiro: {
-    topic: "kiro",
-    aliases: ["kiro"],
     displayName: "Kiro",
-    section: "VS Code 系",
-    capability: "通知转发"
-  },
-  CodeBuddy: {
-    topic: "codebuddy",
-    aliases: ["codebuddy"],
-    displayName: "CodeBuddy",
-    section: "VS Code 系",
-    capability: "通知转发 + 本地自动化目标"
-  },
-  Antigravity: {
-    topic: "antigravity-app",
-    aliases: [
-      "antigravity-app",
-      "antigravityapp",
-      "antigravity-ide",
-      "antigravityide"
-    ],
-    displayName: "Antigravity",
-    section: "自动化目标",
-    capability: "通知转发 + 本地自动化目标"
+    aliases: ["kiro"]
   },
   JetBrains: {
-    topic: "jetbrains",
+    displayName: "JetBrains IDEs",
     aliases: [
       "jetbrains",
       "junie",
@@ -149,39 +115,20 @@ const IDE_HELP_DETAILS = {
       "rubymine",
       "dataspell",
       "fleet"
-    ],
-    displayName: "JetBrains IDEs",
-    section: "独立编辑器",
-    capability: "通知转发"
+    ]
   },
   Zed: {
-    topic: "zed",
-    aliases: ["zed"],
     displayName: "Zed",
-    section: "独立编辑器",
-    capability: "通知转发"
-  },
-  Codex: {
-    topic: "codex-app",
-    aliases: ["codex-app", "codexapp", "codex-ide", "codexide"],
-    displayName: "Codex",
-    section: "自动化目标",
-    capability: "通知转发 + 本地自动化目标"
+    aliases: ["zed"]
   },
   PowerShell: {
-    topic: "powershell",
-    aliases: ["powershell"],
     displayName: "PowerShell",
-    section: "终端工具",
-    capability: "通知转发"
+    aliases: ["powershell", "pwsh"]
   }
 };
 
 const AUTOMATION_TARGET_CONFIGS_BY_ID = Object.fromEntries(
   AUTOMATION_TARGET_CONFIGS.map((config) => [config.id, config])
-);
-const AUTOMATION_TARGET_CONFIGS_BY_SOURCE = Object.fromEntries(
-  AUTOMATION_TARGET_CONFIGS.map((config) => [config.displayName, config])
 );
 const AUTOMATION_COMMAND_SPECS = [
   {
@@ -192,6 +139,12 @@ const AUTOMATION_COMMAND_SPECS = [
   {
     token: "focus",
     mode: DESKTOP_AUTOMATION_MODES.FOCUS,
+    expectsPrompt: false
+  },
+  {
+    token: "minimize",
+    aliases: ["mini"],
+    mode: DESKTOP_AUTOMATION_MODES.MINIMIZE,
     expectsPrompt: false
   },
   {
@@ -212,16 +165,15 @@ const AUTOMATION_COMMAND_SPECS = [
   }
 ];
 const AUTOMATION_TARGET_MATCH_PATTERN = AUTOMATION_TARGET_CONFIGS.map(({ id }) => escapeRegex(id)).join("|");
-const IDE_HELP_TOPIC_ALIASES = new Map(
-  Object.entries(IDE_HELP_DETAILS).flatMap(([sourceLabel, detail]) =>
-    (detail.aliases || [detail.topic]).map((alias) => [String(alias).toLowerCase(), sourceLabel])
+const NOTIFY_ONLY_HELP_TOPIC_ALIASES = new Map(
+  Object.entries(NOTIFY_ONLY_HELP_DETAILS).flatMap(([sourceLabel, detail]) =>
+    detail.aliases.map((alias) => [String(alias).toLowerCase(), sourceLabel])
   )
 );
 const AVAILABLE_HELP_TOPICS = [
   "/help",
   "/help ide",
-  ...AUTOMATION_TARGET_CONFIGS.map(({ id }) => `/help ${id}`),
-  ...Object.values(IDE_HELP_DETAILS).map(({ topic }) => `/help ${topic}`)
+  ...AUTOMATION_TARGET_CONFIGS.map(({ id }) => `/help ${id}`)
 ].filter((value, index, values) => values.indexOf(value) === index);
 
 const DEDUPE_WINDOW_MS = Number(process.env.NOTIFY_DEDUPE_WINDOW_MS || 10000);
@@ -273,42 +225,29 @@ function buildAutomationCommandLine(targetApp, commandSpec, promptText = "") {
   return parts.join(" ");
 }
 
-function getAutomationHomeCommandLines(targetApp) {
-  return [
-    `/${targetApp} <prompt>`,
-    ...AUTOMATION_COMMAND_SPECS.map((commandSpec) =>
-      buildAutomationCommandLine(targetApp, commandSpec, commandSpec.expectsPrompt ? "<prompt>" : "")
-    )
-  ];
-}
-
 function getAutomationUsageCommandLines(targetApp) {
   return [
-    ...AUTOMATION_COMMAND_SPECS.map((commandSpec) =>
-      buildAutomationCommandLine(
-        targetApp,
-        commandSpec,
-        commandSpec.expectsPrompt ? "this is a test prompt" : ""
-      )
-    ),
-    `/${targetApp} <prompt>`
+    `/${targetApp} <prompt>`,
+    buildAutomationCommandLine(targetApp, { token: "paste", expectsPrompt: true }, "<prompt>"),
+    buildAutomationCommandLine(targetApp, { token: "open", expectsPrompt: false }),
+    buildAutomationCommandLine(targetApp, { token: "focus", expectsPrompt: false }),
+    buildAutomationCommandLine(targetApp, { token: "minimize", expectsPrompt: false }),
+    buildAutomationCommandLine(targetApp, { token: "screenshot", expectsPrompt: false })
   ];
 }
 
-function getAutomationActionSummary(targetApp) {
-  const tokens = AUTOMATION_COMMAND_SPECS.map(({ token }) => token).join("|");
-  return `/${targetApp} <prompt>、/${targetApp} ${tokens}`;
+function getAutomationHelpSummaryLines() {
+  return AUTOMATION_TARGET_CONFIGS.map(
+    ({ id }) => `/${id} <prompt>`
+  );
 }
 
-function getIdeHelpSectionSummaryLines() {
-  return IDE_HELP_SECTIONS.map((section) => {
-    const topics = section.sources
-      .map((sourceLabel) => IDE_HELP_DETAILS[sourceLabel]?.topic)
-      .filter(Boolean)
-      .map((topic) => `/help ${topic}`);
+function getAutomationExampleLine(targetApp) {
+  if (targetApp === AUTOMATION_TARGET_APPS.CODEX) {
+    return `/${targetApp} 帮我检查最近一次改动的风险`;
+  }
 
-    return topics.length ? `${section.label}: ${topics.join(" ")}` : null;
-  }).filter(Boolean);
+  return `/${targetApp} paste 先别发送，我要手动确认`;
 }
 
 function isProcessAlive(pid) {
@@ -611,14 +550,12 @@ function resolveHelpTopic(topic) {
     return { kind: "automation-usage", targetApp: lower };
   }
 
-  if (IDE_HELP_TOPIC_ALIASES.has(lower)) {
-    return { kind: "ide-detail", sourceLabel: IDE_HELP_TOPIC_ALIASES.get(lower) };
+  if (AUTOMATION_HELP_TOPIC_ALIASES.has(lower)) {
+    return { kind: "automation-usage", targetApp: AUTOMATION_HELP_TOPIC_ALIASES.get(lower) };
   }
 
-  const sourceLabel = normalizeSourceName(rawTopic);
-
-  if (IDE_HELP_DETAILS[sourceLabel]) {
-    return { kind: "ide-detail", sourceLabel };
+  if (NOTIFY_ONLY_HELP_TOPIC_ALIASES.has(lower)) {
+    return { kind: "notify-only", sourceLabel: NOTIFY_ONLY_HELP_TOPIC_ALIASES.get(lower) };
   }
 
   return { kind: "unknown", topic: rawTopic };
@@ -672,6 +609,8 @@ function formatModeLabel(mode) {
       return "open";
     case DESKTOP_AUTOMATION_MODES.FOCUS:
       return "focus";
+    case DESKTOP_AUTOMATION_MODES.MINIMIZE:
+      return "minimize";
     case DESKTOP_AUTOMATION_MODES.PASTE:
       return "paste";
     case DESKTOP_AUTOMATION_MODES.SCREENSHOT:
@@ -717,7 +656,8 @@ function parseAutomationCommand(text) {
     return {
       targetApp,
       mode: commandSpec.mode,
-      prompt: commandSpec.expectsPrompt ? remainder : ""
+      prompt: commandSpec.expectsPrompt ? remainder : "",
+      openBeforeScreenshot: commandSpec.mode === DESKTOP_AUTOMATION_MODES.SCREENSHOT
     };
   }
 
@@ -764,32 +704,19 @@ function isSourceEnabled(sourceLabel) {
 function buildHelpHomeMessage() {
   const lines = [
     `${botName} 帮助`,
-    "总览:",
-    "/help",
-    "/help ide",
-    ...AUTOMATION_TARGET_CONFIGS.map(({ id }) => `/help ${id}`),
-    "/help <ide>",
-    "",
     "通用命令:",
     "ping",
-    `${MENU_COMMAND_ZH} / help / /help`,
-    `/status / ${STATUS_COMMAND_ZH}`,
+    "/status",
     "/shot",
-    ""
-  ];
-
-  for (const { id, displayName } of AUTOMATION_TARGET_CONFIGS) {
-    lines.push(`${displayName} 自动化:`);
-    lines.push(...getAutomationHomeCommandLines(id));
-    lines.push("");
-  }
-
-  lines.push(
-    "IDE 分层入口:",
-    ...getIdeHelpSectionSummaryLines(),
     "",
-    `说明: ${AUTOMATION_TARGET_CONFIGS.map(({ id }) => `/${id} <prompt>`).join("、")} 都等同于 send；任务串行执行，不排队`
-  );
+    "可操作目标:",
+    ...getAutomationHelpSummaryLines(),
+    "",
+    "查看细节:",
+    ...AUTOMATION_TARGET_CONFIGS.map(({ id }) => `/help ${id}`),
+    "",
+    `入口别名: ${MENU_COMMAND_ZH} / help / /help`
+  ];
 
   return lines.join("\n");
 }
@@ -800,15 +727,13 @@ function buildAutomationUsage(targetApp) {
     `${botName} ${displayName} 帮助`,
     "命令:",
     ...getAutomationUsageCommandLines(targetApp),
-    "/shot",
     "",
-    "说明:",
-    `/${targetApp} <prompt> == /${targetApp} send <prompt>`,
-    "仅允许白名单 QQ 私聊用户触发",
-    "任务严格串行执行，忙时直接拒绝"
+    "注意:",
+    `/${targetApp} <prompt> 等同 /${targetApp} send <prompt>；send 成功后会自动最小化窗口`
   ];
 
   if (
+    targetApp === AUTOMATION_TARGET_APPS.VSCODE ||
     targetApp === AUTOMATION_TARGET_APPS.CURSOR ||
     targetApp === AUTOMATION_TARGET_APPS.TRAE ||
     targetApp === AUTOMATION_TARGET_APPS.TRAE_CN ||
@@ -816,111 +741,43 @@ function buildAutomationUsage(targetApp) {
     targetApp === AUTOMATION_TARGET_APPS.CODEBUDDY_CN ||
     targetApp === AUTOMATION_TARGET_APPS.ANTIGRAVITY
   ) {
-    lines.push(`当前 ${displayName} 流程默认尝试定位窗口右侧下方聊天输入框`);
-    lines.push("如果你把聊天面板移动到别处，focus/paste/send 可能会失败");
+    lines.push(`默认尝试命中 ${displayName} 窗口右侧下方聊天输入框；如果你改了面板布局，focus/paste/send 可能失败`);
   } else {
-    lines.push("Codex 流程优先匹配底部编辑器容器，再执行点击、粘贴和发送");
+    lines.push("默认先匹配底部编辑器容器，再执行点击、粘贴和发送");
   }
+
+  lines.push("", "示例:", getAutomationExampleLine(targetApp));
 
   return lines.join("\n");
 }
 
 function buildIdeListHelpMessage() {
-  const lines = [`${botName} IDE 分层帮助`, "说明: 用 /help <topic> 查看单个入口详情", ""];
-
-  for (const section of IDE_HELP_SECTIONS) {
-    lines.push(`${section.label}:`);
-
-    for (const sourceLabel of section.sources) {
-      const detail = IDE_HELP_DETAILS[sourceLabel];
-
-      if (!detail) {
-        continue;
-      }
-
-      lines.push(
-        `- ${detail.displayName} (${isSourceEnabled(sourceLabel) ? "已启用" : "未启用"}): /help ${detail.topic}`
-      );
-    }
-
-    lines.push("");
-  }
-
-  lines.push(
-    `提示: ${AUTOMATION_TARGET_CONFIGS.map(({ displayName }) => displayName).join("、")} 既是通知源，也是远程自动化目标`
-  );
-  return lines.join("\n");
+  return buildHelpHomeMessage();
 }
 
-function buildIdeDetailNotes(sourceLabel, detail) {
-  const enabledNote = isSourceEnabled(sourceLabel)
-    ? `- 当前已在 NOTIFY_SOURCE_ALLOWLIST 中启用 ${detail.displayName}`
-    : `- 当前未启用 ${detail.displayName}；需要把它加入 NOTIFY_SOURCE_ALLOWLIST`;
-
-  const automationTarget = AUTOMATION_TARGET_CONFIGS_BY_SOURCE[sourceLabel];
-
-  if (automationTarget) {
-    const notes = [
-      `- 会转发 ${detail.displayName} 的 Windows 通知到 QQ`,
-      `- 它同时支持 ${getAutomationActionSummary(automationTarget.id)}`,
-      `- 查看命令细节可发送 /help ${automationTarget.id}`
-    ];
-
-    if (
-      automationTarget.id === AUTOMATION_TARGET_APPS.CURSOR ||
-      automationTarget.id === AUTOMATION_TARGET_APPS.TRAE ||
-      automationTarget.id === AUTOMATION_TARGET_APPS.TRAE_CN ||
-      automationTarget.id === AUTOMATION_TARGET_APPS.CODEBUDDY ||
-      automationTarget.id === AUTOMATION_TARGET_APPS.CODEBUDDY_CN ||
-      automationTarget.id === AUTOMATION_TARGET_APPS.ANTIGRAVITY
-    ) {
-      notes.splice(2, 0, "- 当前自动化默认尝试命中右侧下方聊天输入框");
-    } else if (automationTarget.id === AUTOMATION_TARGET_APPS.CODEX) {
-      notes.splice(2, 0, "- 当前自动化会优先匹配底部编辑器容器后再执行输入和发送");
-    }
-
-    notes.push(enabledNote);
-    return notes;
-  }
-
-  if (sourceLabel === "PowerShell") {
-    return [
-      "- 会转发 PowerShell 相关的 Windows 通知到 QQ",
-      "- 适合验证通知链路是否正常",
-      "- 当前没有 PowerShell 专属远程命令",
-      enabledNote
-    ];
-  }
-
-  return [
-    `- 会转发 ${detail.displayName} 的 Windows toast 到 QQ`,
-    "- 该分层当前主要用于通知源说明，不会直接在该 IDE 内执行命令",
-    `- 如果你想操作本地 ${AUTOMATION_TARGET_CONFIGS.map(({ displayName }) => displayName).join("、")}，请使用对应的 /help 命令`,
-    sourceLabel === "JetBrains"
-      ? "- 包括 JetBrains AI Assistant / Junie，以及 IntelliJ IDEA、PyCharm、WebStorm 等宿主 IDE 的通知"
-      : null,
-    enabledNote
-  ].filter(Boolean);
-}
-
-function buildIdeDetailMessage(sourceLabel) {
-  const detail = IDE_HELP_DETAILS[sourceLabel];
+function buildNotifyOnlyHelpMessage(sourceLabel) {
+  const detail = NOTIFY_ONLY_HELP_DETAILS[sourceLabel];
 
   if (!detail) {
     return buildUnknownHelpMessage(sourceLabel);
   }
 
-  return [
-    `${botName} IDE 帮助`,
-    `目标: ${detail.displayName}`,
-    `分层: ${detail.section}`,
-    `能力: ${detail.capability}`,
+  const lines = [
+    `${botName} ${detail.displayName} 帮助`,
+    "能力: 仅通知转发",
     `状态: ${isSourceEnabled(sourceLabel) ? "已启用" : "未启用"}`,
     "",
-    ...buildIdeDetailNotes(sourceLabel, detail),
-    "",
-    "返回列表: /help ide"
-  ].join("\n");
+    `- ${detail.displayName} 目前只作为 Windows 通知来源转发到当前消息入口`,
+    "- 当前没有远程自动化命令",
+    `- 如果你想操作本地 IDE，请使用 ${AUTOMATION_TARGET_CONFIGS.map(({ id }) => `/help ${id}`).join("、")}`
+  ];
+
+  if (sourceLabel === "JetBrains") {
+    lines.push("- 包括 JetBrains AI Assistant / Junie，以及 IntelliJ IDEA、PyCharm、WebStorm 等宿主 IDE 的通知");
+  }
+
+  lines.push("", "返回总览: /help");
+  return lines.join("\n");
 }
 
 function buildUnknownHelpMessage(topic) {
@@ -938,8 +795,8 @@ function buildHelpMessage(helpCommand) {
       return buildIdeListHelpMessage();
     case "automation-usage":
       return buildAutomationUsage(helpCommand.targetApp);
-    case "ide-detail":
-      return buildIdeDetailMessage(helpCommand.sourceLabel);
+    case "notify-only":
+      return buildNotifyOnlyHelpMessage(helpCommand.sourceLabel);
     case "unknown":
       return buildUnknownHelpMessage(helpCommand.topic);
     default:
@@ -1021,12 +878,15 @@ function handleActionFailed(error, meta) {
   );
 }
 
-async function executeAutomationTask(event, targetApp, mode, prompt) {
+async function executeAutomationTask(event, targetApp, mode, prompt, options = {}) {
+  const openBeforeScreenshot = options.openBeforeScreenshot === true;
   const task = createTask(
     mode,
     prompt,
     event.user_id,
-    mode === DESKTOP_AUTOMATION_MODES.SCREENSHOT ? "Desktop" : getTargetDisplayName(targetApp)
+    mode === DESKTOP_AUTOMATION_MODES.SCREENSHOT && !openBeforeScreenshot
+      ? "Desktop"
+      : getTargetDisplayName(targetApp)
   );
   currentTask = task;
 
@@ -1037,6 +897,29 @@ async function executeAutomationTask(event, targetApp, mode, prompt) {
 
     if (mode === DESKTOP_AUTOMATION_MODES.SCREENSHOT) {
       try {
+        let automation = null;
+
+        if (openBeforeScreenshot) {
+          automation = await runAutomationAction(targetApp, {
+            mode: DESKTOP_AUTOMATION_MODES.OPEN,
+            timeoutMs: AUTOMATION_TIMEOUT_MS
+          });
+
+          if (automation?.status !== "success") {
+            result = {
+              success: false,
+              targetApp,
+              mode,
+              failureReason: automation?.failureReason || "automation_failed",
+              automation,
+              screenshotPath: "",
+              screenshotError: ""
+            };
+
+            throw new Error("__screenshot_open_failed__");
+          }
+        }
+
         const evidence = await captureDesktopEvidence({
           taskId: task.taskId,
           screenshotDir: SCREENSHOT_DIR || undefined,
@@ -1048,8 +931,34 @@ async function executeAutomationTask(event, targetApp, mode, prompt) {
           targetApp,
           mode,
           failureReason: "",
-          automation: null,
+          automation,
           screenshotPath: evidence.screenshotPath,
+          screenshotError: ""
+        };
+      } catch (error) {
+        if (error.message !== "__screenshot_open_failed__") {
+          result = {
+            success: false,
+            targetApp,
+            mode,
+            failureReason: error.message || "capture_desktop_failed",
+            automation: null,
+            screenshotPath: "",
+            screenshotError: error.message || "capture_desktop_failed"
+          };
+        }
+      }
+    } else if (mode === DESKTOP_AUTOMATION_MODES.MINIMIZE) {
+      try {
+        const automation = await minimizeAutomationWindow(targetApp);
+
+        result = {
+          success: automation.status === "success" || automation.status === "noop",
+          targetApp,
+          mode,
+          failureReason: "",
+          automation,
+          screenshotPath: "",
           screenshotError: ""
         };
       } catch (error) {
@@ -1057,10 +966,10 @@ async function executeAutomationTask(event, targetApp, mode, prompt) {
           success: false,
           targetApp,
           mode,
-          failureReason: error.message || "capture_desktop_failed",
+          failureReason: error.message || "minimize_failed",
           automation: null,
           screenshotPath: "",
-          screenshotError: error.message || "capture_desktop_failed"
+          screenshotError: ""
         };
       }
     } else {
@@ -1142,7 +1051,9 @@ function handleAutomationCommand(event, command) {
     return;
   }
 
-  executeAutomationTask(event, command.targetApp, command.mode, command.prompt).catch((error) => {
+  executeAutomationTask(event, command.targetApp, command.mode, command.prompt, {
+    openBeforeScreenshot: command.openBeforeScreenshot === true
+  }).catch((error) => {
     console.error(`[task] failed to start task: ${error.message}`);
   });
 }

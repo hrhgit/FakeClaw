@@ -27,6 +27,7 @@ export const DESKTOP_AUTOMATION_CONFIG_PATH = path.resolve(
 
 export const AUTOMATION_TARGET_APPS = {
   CODEX: "codex",
+  VSCODE: "vscode",
   CURSOR: "cursor",
   TRAE: "trae",
   TRAE_CN: "traecn",
@@ -38,6 +39,7 @@ export const AUTOMATION_TARGET_APPS = {
 export const DESKTOP_AUTOMATION_MODES = {
   OPEN: "open",
   FOCUS: "focus",
+  MINIMIZE: "minimize",
   PASTE: "paste",
   SEND: "send",
   SCREENSHOT: "screenshot"
@@ -51,6 +53,13 @@ export const AUTOMATION_TARGET_CONFIGS = Object.freeze({
     displayName: "Codex",
     launchCommandEnv: "CODEX_LAUNCH_COMMAND",
     defaultLaunchCommand: DEFAULT_CODEX_LAUNCH_COMMAND
+  },
+  [AUTOMATION_TARGET_APPS.VSCODE]: {
+    id: AUTOMATION_TARGET_APPS.VSCODE,
+    displayName: "VS Code",
+    sourceLabels: ["Code"],
+    launchCommandEnv: "VSCODE_LAUNCH_COMMAND",
+    defaultLaunchCommand: ""
   },
   [AUTOMATION_TARGET_APPS.CURSOR]: {
     id: AUTOMATION_TARGET_APPS.CURSOR,
@@ -436,10 +445,12 @@ export async function runDesktopAutomation(targetApp, prompt, options = {}) {
     screenshotError = error.message || "screenshot_failed";
   }
 
-  try {
-    await minimizeAutomationWindow(config.id);
-  } catch (error) {
-    console.warn(`[automation] failed to minimize ${config.displayName} window: ${error.message}`);
+  if (mode === DESKTOP_AUTOMATION_MODES.SEND) {
+    try {
+      await minimizeAutomationWindow(config.id);
+    } catch (error) {
+      console.warn(`[automation] failed to minimize ${config.displayName} window: ${error.message}`);
+    }
   }
 
   const success = automation?.status === "success";

@@ -1,5 +1,5 @@
 param(
-  [ValidateSet("codex", "cursor", "trae", "traecn", "codebuddy", "codebuddycn", "antigravity")]
+  [ValidateSet("codex", "vscode", "cursor", "trae", "traecn", "codebuddy", "codebuddycn", "antigravity")]
   [string]$TargetApp = "codex"
 )
 
@@ -20,6 +20,14 @@ public static class DesktopWindowNative {
 
 function Get-TargetConfig {
   switch ($TargetApp) {
+    "vscode" {
+      return @{
+        Id = "vscode"
+        DisplayName = "VS Code"
+        ProcessNames = @("Code", "Code - Insiders")
+        TitleRegex = "Visual Studio Code|VS Code|Code - Insiders"
+      }
+    }
     "cursor" {
       return @{
         Id = "cursor"
