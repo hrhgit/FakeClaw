@@ -3,6 +3,8 @@ setlocal
 
 cd /d "%~dp0"
 
+if "%BOT_PLATFORM%"=="" set "BOT_PLATFORM=napcat"
+
 where node >nul 2>nul
 if errorlevel 1 (
   echo [error] Node.js not found in PATH.
@@ -23,7 +25,7 @@ if not exist ".env" (
   exit /b 1
 )
 
-echo [start] Launching NapCat notification forwarder...
+echo [start] Launching FakeClaw service for platform: %BOT_PLATFORM%
 call npm start
 
 set "EXIT_CODE=%ERRORLEVEL%"

@@ -1,10 +1,6 @@
 @echo off
-setlocal
+setlocal EnableExtensions
 
 cd /d "%~dp0"
-set "BOT_PLATFORM=wecom"
-
-echo [start] Launching notification forwarder for WeCom...
-call "%~dp0start-app.bat"
-
-exit /b %ERRORLEVEL%
+start "FakeClaw Service (WeCom)" /d "%~dp0" "%ComSpec%" /k call "%~dp0scripts\start-service-window.bat" wecom WeCom
+exit /b 0

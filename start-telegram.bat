@@ -1,10 +1,6 @@
 @echo off
-setlocal
+setlocal EnableExtensions
 
 cd /d "%~dp0"
-set "BOT_PLATFORM=telegram"
-
-echo [start] Launching notification forwarder for Telegram...
-call "%~dp0start-app.bat"
-
-exit /b %ERRORLEVEL%
+start "FakeClaw Service (Telegram)" /d "%~dp0" "%ComSpec%" /k call "%~dp0scripts\start-service-window.bat" telegram Telegram
+exit /b 0

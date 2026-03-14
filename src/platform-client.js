@@ -47,7 +47,7 @@ export function getPlatformBotName(platform = resolveBotPlatform()) {
       return process.env.WECOM_BOT_NAME || process.env.BOT_NAME || "WeComBot";
     case BOT_PLATFORMS.NAPCAT:
     default:
-      return process.env.BOT_NAME || "NapCatBot";
+      return process.env.QQ_BOT_NAME || process.env.BOT_NAME || "NapCatBot";
   }
 }
 

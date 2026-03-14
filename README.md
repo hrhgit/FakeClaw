@@ -140,10 +140,14 @@ npm run dev
 ### 核心连接
 
 - `BOT_PLATFORM`: 当前消息平台，支持 `napcat | telegram | feishu | wecom`
+- `BOT_NAME`: 通用机器人显示名，未单独配置平台名称时作为回退
+
+### QQ / NapCat
+
+- `QQ_BOT_NAME`: QQ / NapCat 机器人显示名，未配置时回退到 `BOT_NAME`
 - `NAPCAT_WS_URL`: NapCat WebSocket 地址，默认 `ws://127.0.0.1:3001`
 - `NAPCAT_TOKEN`: NapCat WebSocket token
 - `NAPCAT_START_SCRIPT`: 本机 NapCat 启动脚本路径
-- `BOT_NAME`: 通用机器人显示名，未单独配置平台名称时作为回退
 - `QQ_USER_ID`: 唯一允许执行远程命令、同时接收通知的 QQ 账号
 
 ### Telegram

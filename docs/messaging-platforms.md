@@ -79,6 +79,8 @@ WECOM_WEBHOOK_PATH=/wecom/events
 
 ```env
 BOT_PLATFORM=napcat
+QQ_BOT_NAME=NapCatBot
+NAPCAT_WS_URL=ws://127.0.0.1:3001
 NAPCAT_TOKEN=<token>
 NAPCAT_START_SCRIPT=<local napcat bat path>
 QQ_USER_ID=<your qq user id>

@@ -1,10 +1,6 @@
 @echo off
-setlocal
+setlocal EnableExtensions
 
 cd /d "%~dp0"
-set "BOT_PLATFORM=feishu"
-
-echo [start] Launching notification forwarder for Feishu...
-call "%~dp0start-app.bat"
-
-exit /b %ERRORLEVEL%
+start "FakeClaw Service (Feishu)" /d "%~dp0" "%ComSpec%" /k call "%~dp0scripts\start-service-window.bat" feishu Feishu
+exit /b 0
