@@ -406,6 +406,7 @@ export async function runDesktopAutomation(targetApp, prompt, options = {}) {
   const config = resolveTargetAppConfig(targetApp);
   const taskId = options.taskId || `task-${Date.now()}`;
   const mode = options.mode || DESKTOP_AUTOMATION_MODES.SEND;
+  const skipMinimizeAfterSend = options.skipMinimizeAfterSend === true;
   const screenshotDelayMs = resolveScreenshotDelayMs(
     mode,
     options.screenshotDelayMs ?? process.env.SCREENSHOT_AFTER_ACTION_DELAY_MS
@@ -445,7 +446,7 @@ export async function runDesktopAutomation(targetApp, prompt, options = {}) {
     screenshotError = error.message || "screenshot_failed";
   }
 
-  if (mode === DESKTOP_AUTOMATION_MODES.SEND) {
+  if (mode === DESKTOP_AUTOMATION_MODES.SEND && !skipMinimizeAfterSend) {
     try {
       await minimizeAutomationWindow(config.id);
     } catch (error) {

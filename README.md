@@ -258,6 +258,7 @@ npm run dev
 
 ```text
 /<target> <prompt>
+/<target> nc <prompt>
 /<target> send <prompt>
 /<target> paste <prompt>
 /<target> open
@@ -270,7 +271,8 @@ npm run dev
 
 - `/<target> <prompt>` 等同于 `/<target> send <prompt>`
 - `send` 会粘贴并发送
-- `send` 成功后会自动最小化目标 IDE
+- `send` 成功后默认会自动最小化目标 IDE
+- 如需发送后保留窗口，可用 `/<target> nc <prompt>` 或 `/<target> send nc <prompt>`
 - `paste` 只粘贴，不自动回车
 - `open` 用于拉起目标 IDE
 - `focus` 会切到目标窗口，并尝试命中聊天输入区
@@ -282,6 +284,7 @@ npm run dev
 
 ```text
 /codex 帮我检查最近一次改动的风险
+/codex nc 帮我检查最近一次改动的风险
 /vscode open
 /cursor open
 /trae paste 先别发送，我要手动确认

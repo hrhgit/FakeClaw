@@ -130,6 +130,17 @@ const NOTIFY_ONLY_HELP_DETAILS = {
 const AUTOMATION_TARGET_CONFIGS_BY_ID = Object.fromEntries(
   AUTOMATION_TARGET_CONFIGS.map((config) => [config.id, config])
 );
+const AUTOMATION_SEND_OPTION_TOKENS = {
+  NC: "nc"
+};
+const QUICK_REPLY_TARGET_BY_SOURCE_LABEL = Object.freeze({
+  Codex: AUTOMATION_TARGET_APPS.CODEX,
+  Code: AUTOMATION_TARGET_APPS.VSCODE,
+  Cursor: AUTOMATION_TARGET_APPS.CURSOR,
+  Trae: AUTOMATION_TARGET_APPS.TRAE,
+  CodeBuddy: AUTOMATION_TARGET_APPS.CODEBUDDY,
+  Antigravity: AUTOMATION_TARGET_APPS.ANTIGRAVITY
+});
 const AUTOMATION_COMMAND_SPECS = [
   {
     token: "open",
@@ -177,6 +188,7 @@ const AVAILABLE_HELP_TOPICS = [
 ].filter((value, index, values) => values.indexOf(value) === index);
 
 const DEDUPE_WINDOW_MS = Number(process.env.NOTIFY_DEDUPE_WINDOW_MS || 10000);
+const NOTIFY_POLL_INTERVAL_MS = Number(process.env.NOTIFY_POLL_INTERVAL_MS || 1500);
 const LISTENER_RESTART_MS = Number(process.env.LISTENER_RESTART_MS || 3000);
 const POWERSHELL_PATH = process.env.POWERSHELL_PATH || "powershell.exe";
 const FILTER_MODE = process.env.NOTIFY_FILTER_MODE || "all";
@@ -198,6 +210,7 @@ const instanceLockPath = path.resolve(__dirname, "../.fakeclaw.lock");
 
 const client = new PlatformClient({ platform: botPlatform });
 const recentNotifications = new Map();
+const pendingQuickReplies = new Map();
 
 let listenerProcess;
 let listenerRestartTimer;
@@ -225,9 +238,14 @@ function buildAutomationCommandLine(targetApp, commandSpec, promptText = "") {
   return parts.join(" ");
 }
 
+function isAutomationSendOptionToken(token) {
+  return token === AUTOMATION_SEND_OPTION_TOKENS.NC;
+}
+
 function getAutomationUsageCommandLines(targetApp) {
   return [
     `/${targetApp} <prompt>`,
+    `/${targetApp} nc <prompt>`,
     buildAutomationCommandLine(targetApp, { token: "paste", expectsPrompt: true }, "<prompt>"),
     buildAutomationCommandLine(targetApp, { token: "open", expectsPrompt: false }),
     buildAutomationCommandLine(targetApp, { token: "focus", expectsPrompt: false }),
@@ -403,6 +421,12 @@ function normalizeSourceName(value) {
 }
 
 function buildDedupeKey(notification) {
+  const systemNotificationId = Number(notification.systemNotificationId || 0);
+
+  if (systemNotificationId > 0) {
+    return [`id`, notification.sourceLabel || "unknown", systemNotificationId].join("|").toLowerCase();
+  }
+
   return [
     notification.sourceLabel || "unknown",
     notification.title || "",
@@ -410,6 +434,40 @@ function buildDedupeKey(notification) {
   ]
     .join("|")
     .toLowerCase();
+}
+
+function resolveQuickReplyTargetApp(sourceLabel) {
+  return QUICK_REPLY_TARGET_BY_SOURCE_LABEL[String(sourceLabel || "").trim()] || "";
+}
+
+function setPendingQuickReplyTarget(userId, targetApp) {
+  const normalizedUserId = String(userId || "").trim();
+
+  if (!normalizedUserId) {
+    return;
+  }
+
+  if (!targetApp) {
+    pendingQuickReplies.delete(normalizedUserId);
+    return;
+  }
+
+  pendingQuickReplies.set(normalizedUserId, {
+    targetApp,
+    createdAt: Date.now()
+  });
+}
+
+function consumePendingQuickReplyTarget(userId) {
+  const normalizedUserId = String(userId || "").trim();
+
+  if (!normalizedUserId) {
+    return "";
+  }
+
+  const pending = pendingQuickReplies.get(normalizedUserId);
+  pendingQuickReplies.delete(normalizedUserId);
+  return pending?.targetApp || "";
 }
 
 function pruneRecentNotifications(now = Date.now()) {
@@ -466,6 +524,7 @@ function normalizeNotificationPayload(payload) {
     sourceLabel,
     title,
     body,
+    systemNotificationId: Number(payload.systemNotificationId || 0),
     timestamp: payload.timestamp || new Date().toISOString(),
     rawLines,
     category: payload.category || "general",
@@ -497,6 +556,7 @@ function formatNotificationMessage(notification) {
 function logCapturedNotification(notification) {
   const summary = {
     source: notification.sourceLabel,
+    systemNotificationId: notification.systemNotificationId || 0,
     title: notification.title || "",
     body: notification.body || "",
     rawLines: notification.rawLines
@@ -644,24 +704,52 @@ function parseAutomationCommand(text) {
     };
   }
 
-  const [firstTokenRaw, ...rest] = body.split(/\s+/);
-  const firstToken = firstTokenRaw.toLowerCase();
-  const remainder = rest.join(" ").trim();
+  const tokens = body.split(/\s+/).filter(Boolean);
+  let tokenIndex = 0;
+  let skipMinimizeAfterSend = false;
+
+  while (
+    tokenIndex < tokens.length &&
+    isAutomationSendOptionToken(tokens[tokenIndex].toLowerCase())
+  ) {
+    skipMinimizeAfterSend = true;
+    tokenIndex += 1;
+  }
+
+  const firstToken = tokens[tokenIndex]?.toLowerCase() || "";
 
   const commandSpec = AUTOMATION_COMMAND_SPECS.find(({ token, aliases = [] }) =>
     [token, ...aliases].includes(firstToken)
   );
 
   if (commandSpec) {
+    tokenIndex += 1;
+
+    if (commandSpec.mode === DESKTOP_AUTOMATION_MODES.SEND) {
+      while (
+        tokenIndex < tokens.length &&
+        isAutomationSendOptionToken(tokens[tokenIndex].toLowerCase())
+      ) {
+        skipMinimizeAfterSend = true;
+        tokenIndex += 1;
+      }
+    }
+
     return {
       targetApp,
       mode: commandSpec.mode,
-      prompt: commandSpec.expectsPrompt ? remainder : "",
-      openBeforeScreenshot: commandSpec.mode === DESKTOP_AUTOMATION_MODES.SCREENSHOT
+      prompt: commandSpec.expectsPrompt ? tokens.slice(tokenIndex).join(" ").trim() : "",
+      openBeforeScreenshot: commandSpec.mode === DESKTOP_AUTOMATION_MODES.SCREENSHOT,
+      skipMinimizeAfterSend
     };
   }
 
-  return { targetApp, mode: DESKTOP_AUTOMATION_MODES.SEND, prompt: body };
+  return {
+    targetApp,
+    mode: DESKTOP_AUTOMATION_MODES.SEND,
+    prompt: tokens.slice(tokenIndex).join(" ").trim(),
+    skipMinimizeAfterSend
+  };
 }
 
 function buildBusyRejectedMessage(task) {
@@ -709,6 +797,9 @@ function buildHelpHomeMessage() {
     "/status",
     "/shot",
     "",
+    "快速回复:",
+    "刚转发过支持远程操作的 IDE 通知时，下一条非命令消息会直接发送到该 IDE",
+    "",
     "可操作目标:",
     ...getAutomationHelpSummaryLines(),
     "",
@@ -729,7 +820,8 @@ function buildAutomationUsage(targetApp) {
     ...getAutomationUsageCommandLines(targetApp),
     "",
     "注意:",
-    `/${targetApp} <prompt> 等同 /${targetApp} send <prompt>；send 成功后会自动最小化窗口`
+    `/${targetApp} <prompt> 等同 /${targetApp} send <prompt>；send 成功后默认会自动最小化窗口`,
+    `如需发送后保留窗口，可用 /${targetApp} nc <prompt> 或 /${targetApp} send nc <prompt>`
   ];
 
   if (
@@ -1052,7 +1144,8 @@ function handleAutomationCommand(event, command) {
   }
 
   executeAutomationTask(event, command.targetApp, command.mode, command.prompt, {
-    openBeforeScreenshot: command.openBeforeScreenshot === true
+    openBeforeScreenshot: command.openBeforeScreenshot === true,
+    skipMinimizeAfterSend: command.skipMinimizeAfterSend === true
   }).catch((error) => {
     console.error(`[task] failed to start task: ${error.message}`);
   });
@@ -1067,21 +1160,21 @@ function handleAuthorizedCommand(event, text) {
     sendPrivateText(event.user_id, "pong").catch((error) => {
       console.error(`[command] failed to reply to ping: ${error.message}`);
     });
-    return;
+    return true;
   }
 
   if (helpCommand) {
     sendPrivateText(event.user_id, buildHelpMessage(helpCommand)).catch((error) => {
       console.error(`[command] failed to send help: ${error.message}`);
     });
-    return;
+    return true;
   }
 
   if (trimmed === STATUS_COMMAND_ZH || lower === "/status") {
     sendPrivateText(event.user_id, buildStatusMessage()).catch((error) => {
       console.error(`[command] failed to send status: ${error.message}`);
     });
-    return;
+    return true;
   }
 
   if (lower === "/shot" || lower === "/screenshot") {
@@ -1090,14 +1183,38 @@ function handleAuthorizedCommand(event, text) {
       mode: DESKTOP_AUTOMATION_MODES.SCREENSHOT,
       prompt: ""
     });
-    return;
+    return true;
   }
 
   const automationCommand = parseAutomationCommand(trimmed);
 
   if (automationCommand) {
     handleAutomationCommand(event, automationCommand);
+    return true;
   }
+
+  return false;
+}
+
+function handleQuickReply(event, text, targetApp) {
+  const prompt = String(text || "").trim();
+
+  if (!prompt || !targetApp) {
+    return false;
+  }
+
+  console.log(
+    `[quick-reply] user=${event.user_id} target=${getTargetDisplayName(targetApp)} prompt=${JSON.stringify(
+      summarizePrompt(prompt)
+    )}`
+  );
+
+  handleAutomationCommand(event, {
+    targetApp,
+    mode: DESKTOP_AUTOMATION_MODES.SEND,
+    prompt
+  });
+  return true;
 }
 
 function handleEvent(event) {
@@ -1112,7 +1229,16 @@ function handleEvent(event) {
   }
 
   if (isAuthorizedPrivateMessage(event)) {
-    handleAuthorizedCommand(event, text);
+    const pendingQuickReplyTarget = consumePendingQuickReplyTarget(event.user_id);
+
+    if (handleAuthorizedCommand(event, text)) {
+      return;
+    }
+
+    if (pendingQuickReplyTarget) {
+      handleQuickReply(event, text, pendingQuickReplyTarget);
+    }
+
     return;
   }
 
@@ -1144,9 +1270,11 @@ function handleNotificationPayload(payload) {
   }
 
   const message = formatNotificationMessage(notification);
+  const quickReplyTargetApp = resolveQuickReplyTargetApp(notification.sourceLabel);
 
   sendPrivateText(authorizedUserId, message)
     .then(() => {
+      setPendingQuickReplyTarget(authorizedUserId, quickReplyTargetApp);
       console.log(
         `[notify] forwarded ${notification.sourceLabel} notification: ${
           notification.title || notification.body || "<empty>"
@@ -1204,7 +1332,9 @@ function startToastListener() {
     "-File",
     listenerScriptPath,
     "-SourceAllowList",
-    SOURCE_ALLOWLIST.join(",")
+    SOURCE_ALLOWLIST.join(","),
+    "-PollIntervalMs",
+    String(NOTIFY_POLL_INTERVAL_MS)
   ];
 
   listenerProcess = spawn(POWERSHELL_PATH, args, {

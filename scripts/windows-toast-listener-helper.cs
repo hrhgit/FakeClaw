@@ -3,14 +3,17 @@ using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
+using System.Runtime.InteropServices;
 using System.Text;
 using System.Threading;
 
 internal static class Program
 {
     private const int DefaultPollIntervalMs = 1500;
+    private const int APPMODEL_ERROR_NO_PACKAGE = 15700;
 
     private static readonly HashSet<uint> SeenNotificationIds = new HashSet<uint>();
+    private static readonly AutoResetEvent SyncSignal = new AutoResetEvent(false);
     private static readonly MethodInfo AsTaskMethod = typeof(System.WindowsRuntimeSystemExtensions)
         .GetMethods(BindingFlags.Public | BindingFlags.Static)
         .First(method => method.Name == "AsTask" && method.IsGenericMethod && method.GetParameters().Length == 1);
@@ -46,11 +49,13 @@ internal static class Program
             }
 
             var baselineCount = InitializeBaseline(listener);
+            var eventSubscribed = TrySubscribeNotificationChanged(listener);
             WriteError(
                 string.Format(
-                    "[toast-listener] ready; allowed sources: {0}; baseline={1}; poll={2} ms",
+                    "[toast-listener] ready; allowed sources: {0}; baseline={1}; mode={2}; poll={3} ms",
                     string.Join(", ", allowList.OrderBy(item => item)),
                     baselineCount,
+                    eventSubscribed ? "foreground-event" : "poll-only",
                     options.PollIntervalMs
                 )
             );
@@ -64,14 +69,13 @@ internal static class Program
             {
                 try
                 {
-                    PollNotifications(listener, allowList);
+                    SyncSignal.WaitOne(options.PollIntervalMs);
+                    SyncNotifications(listener, allowList);
                 }
                 catch (Exception ex)
                 {
-                    WriteError(string.Format("[toast-listener] poll failed: {0}", ex.Message));
+                    WriteError(string.Format("[toast-listener] sync failed: {0}", ex.Message));
                 }
-
-                Thread.Sleep(options.PollIntervalMs);
             }
         }
         catch (Exception ex)
@@ -159,29 +163,113 @@ internal static class Program
 
     private static int InitializeBaseline(object listener)
     {
-        var count = 0;
+        var currentIds = GetNotifications(listener)
+            .Cast<object>()
+            .Select(GetNotificationId)
+            .ToList();
 
-        foreach (var notification in GetNotifications(listener))
+        SeenNotificationIds.Clear();
+
+        foreach (var notificationId in currentIds)
         {
-            SeenNotificationIds.Add(GetNotificationId(notification));
-            count += 1;
+            SeenNotificationIds.Add(notificationId);
         }
 
-        return count;
+        return currentIds.Count;
     }
 
-    private static void PollNotifications(object listener, HashSet<string> allowList)
+    private static bool TrySubscribeNotificationChanged(object listener)
     {
-        foreach (var notification in GetNotifications(listener))
+        if (!HasPackageIdentity())
+        {
+            WriteError("[toast-listener] foreground event unavailable without package identity; using poll fallback");
+            return false;
+        }
+
+        try
+        {
+            var addMethod = ListenerType.GetMethod("add_NotificationChanged", BindingFlags.Public | BindingFlags.Instance);
+            if (addMethod == null)
+            {
+                return false;
+            }
+
+            var handlerMethod = typeof(Program).GetMethod(
+                "OnNotificationChanged",
+                BindingFlags.NonPublic | BindingFlags.Static
+            );
+
+            if (handlerMethod == null)
+            {
+                return false;
+            }
+
+            var handlerType = addMethod.GetParameters()[0].ParameterType;
+            var handler = Delegate.CreateDelegate(handlerType, handlerMethod);
+            addMethod.Invoke(listener, new object[] { handler });
+            return true;
+        }
+        catch (Exception ex)
+        {
+            var details = ex.InnerException != null
+                ? string.Format("{0} | inner={1}", ex.Message, ex.InnerException)
+                : ex.ToString();
+            WriteError(string.Format("[toast-listener] failed to subscribe foreground event: {0}", details));
+            return false;
+        }
+    }
+
+    [DllImport("kernel32.dll", CharSet = CharSet.Unicode, ExactSpelling = true)]
+    private static extern int GetCurrentPackageFullName(ref int packageFullNameLength, StringBuilder packageFullName);
+
+    private static bool HasPackageIdentity()
+    {
+        var length = 0;
+        var result = GetCurrentPackageFullName(ref length, null);
+
+        if (result == APPMODEL_ERROR_NO_PACKAGE)
+        {
+            return false;
+        }
+
+        return result == 0 || result == 122;
+    }
+
+    private static void OnNotificationChanged(object sender, object args)
+    {
+        try
+        {
+            var changeKind = GetStringProperty(args, "ChangeKind");
+            var notificationId = GetUIntProperty(args, "UserNotificationId");
+            WriteError(
+                string.Format(
+                    "[toast-listener] event: change={0}; id={1}",
+                    string.IsNullOrWhiteSpace(changeKind) ? "unknown" : changeKind,
+                    notificationId
+                )
+            );
+        }
+        catch
+        {
+        }
+
+        SyncSignal.Set();
+    }
+
+    private static void SyncNotifications(object listener, HashSet<string> allowList)
+    {
+        var currentNotifications = GetNotifications(listener).Cast<object>().ToList();
+        var currentIds = new HashSet<uint>();
+
+        foreach (var notification in currentNotifications)
         {
             var notificationId = GetNotificationId(notification);
+            currentIds.Add(notificationId);
 
             if (SeenNotificationIds.Contains(notificationId))
             {
                 continue;
             }
-
-            SeenNotificationIds.Add(notificationId);
 
             var payload = ConvertToPayload(notification, allowList);
 
@@ -191,6 +279,13 @@ internal static class Program
             }
 
             Console.WriteLine(payload.ToJson());
+        }
+
+        SeenNotificationIds.Clear();
+
+        foreach (var notificationId in currentIds)
+        {
+            SeenNotificationIds.Add(notificationId);
         }
     }
 
@@ -422,6 +517,24 @@ internal static class Program
     {
         var value = GetPropertyValue(instance, propertyName);
         return value == null ? string.Empty : value.ToString();
+    }
+
+    private static uint GetUIntProperty(object instance, string propertyName)
+    {
+        var value = GetPropertyValue(instance, propertyName);
+        if (value == null)
+        {
+            return 0;
+        }
+
+        try
+        {
+            return Convert.ToUInt32(value);
+        }
+        catch
+        {
+            return 0;
+        }
     }
 
     private static string GetNestedStringProperty(object instance, string firstPropertyName, string secondPropertyName)
