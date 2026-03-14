@@ -20,7 +20,14 @@ import {
   runDesktopAutomation
 } from "./automation.js";
 import { startCalibrationWebServer } from "./calibration-web.js";
-import { createImageSegment, createTextSegment, NapCatClient } from "./napcat-client.js";
+import {
+  createImageSegment,
+  createTextSegment,
+  getAuthorizedUserId,
+  getPlatformBotName,
+  PlatformClient,
+  resolveBotPlatform
+} from "./platform-client.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -231,19 +238,18 @@ const SCREENSHOT_DIR = process.env.SCREENSHOT_DIR || "";
 const SCREENSHOT_RETENTION = Number(process.env.SCREENSHOT_RETENTION || 20);
 const CALIBRATION_WEB_ENABLED = process.env.CALIBRATION_WEB_ENABLED !== "false";
 
-const qqUserId = process.env.QQ_USER_ID || "";
-const wsUrl = process.env.NAPCAT_WS_URL || "ws://127.0.0.1:3001";
-const token = process.env.NAPCAT_TOKEN || "";
-const botName = process.env.BOT_NAME || "NapCatBot";
+const botPlatform = resolveBotPlatform();
+const authorizedUserId = getAuthorizedUserId(botPlatform);
+const botName = getPlatformBotName(botPlatform);
 const listenerScriptPath = path.resolve(__dirname, "../scripts/windows-toast-listener.ps1");
 const instanceLockPath = path.resolve(__dirname, "../.fakeclaw.lock");
 
-const client = new NapCatClient({ wsUrl, token });
+const client = new PlatformClient({ platform: botPlatform });
 const recentNotifications = new Map();
 
 let listenerProcess;
 let listenerRestartTimer;
-let qqTargetWarningShown = false;
+let targetWarningShown = false;
 let instanceLockFd;
 let taskCounter = 0;
 let currentTask = null;
@@ -633,7 +639,7 @@ function isManagedCommandText(text) {
 }
 
 function isAuthorizedPrivateMessage(event) {
-  return event.message_type === "private" && String(event.user_id) === String(qqUserId);
+  return event.message_type === "private" && String(event.user_id) === String(authorizedUserId);
 }
 
 function summarizePrompt(prompt, maxLength = 80) {
@@ -961,9 +967,9 @@ function finalizeTask(task) {
 
 async function sendPrivateText(userId, message) {
   if (!userId) {
-    if (!qqTargetWarningShown) {
-      qqTargetWarningShown = true;
-      console.warn("[notify] QQ_USER_ID is empty, notifications and command replies will not be sent");
+    if (!targetWarningShown) {
+      targetWarningShown = true;
+      console.warn("[notify] target user id is empty, notifications and command replies will not be sent");
     }
     return false;
   }
@@ -1228,7 +1234,7 @@ function handleNotificationPayload(payload) {
 
   const message = formatNotificationMessage(notification);
 
-  sendPrivateText(qqUserId, message)
+  sendPrivateText(authorizedUserId, message)
     .then(() => {
       console.log(
         `[notify] forwarded ${notification.sourceLabel} notification: ${
@@ -1347,15 +1353,15 @@ if (!ensureSingleInstance()) {
 }
 
 client.on("open", (url) => {
-  console.log(`[bot] connected: ${url}`);
+  console.log(`[bot] ${botPlatform} connected: ${url}`);
 });
 
 client.on("close", () => {
-  console.log("[bot] disconnected, retrying in 3s");
+  console.log(`[bot] ${botPlatform} disconnected`);
 });
 
 client.on("error", (error) => {
-  console.error("[bot] websocket error", error.message);
+  console.error(`[bot] ${botPlatform} error`, error.message);
 });
 
 client.on("invalid-payload", (error, rawPayload) => {
