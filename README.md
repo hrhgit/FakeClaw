@@ -15,17 +15,20 @@
 - 支持按需 只粘贴不发送，适合先远程准备提示词、再回到电脑上手动确认
 - 每次自动化任务结束后都会 **回传执行结果和桌面截图**，方便确认到底有没有命中正确窗口和输入区
 - 支持通过 **统一配置、校准脚本和本地校准网页** 修正不同机器、不同分辨率、不同 IDE 布局下的输入框定位问题
+- 支持 **Windows 托盘常驻控制**，可查看运行状态、暂停/恢复通知、重启服务并打开配置面板修改 `.env`
+- 支持 **快速回复**，支持的 IDE 通知转发后，下一条非命令私聊可直接发送到对应 IDE
 
 ## 本次更新
 
 - 新增统一消息平台抽象，可在 `NapCat / QQ`、`Telegram`、`飞书`、`企业微信` 之间切换
-- 新增 `startup/start-qq.bat`、`startup/start-telegram.bat`、`startup/start-feishu.bat`、`startup/start-wecom.bat` 启动入口
 - 扩展 `.env.example`，补齐各平台机器人与鉴权相关配置
 - 新增 [docs/messaging-platforms.md](./docs/messaging-platforms.md)，汇总各平台接入说明
-- 远程操作目标从原先的少数桌面应用扩展到 `Codex / VS Code / Cursor / Trae / Trae CN / CodeBuddy / CodeBuddy CN / Antigravity`
+- 新增 **快速回复自动指定 IDE** 逻辑，收到支持的 IDE 通知后可直接回一句话继续执行
 - 统一了桌面自动化配置，布局阈值集中放在 [config/desktop-automation.config.json](./config/desktop-automation.config.json)
 - 新增桌面校准脚本和批处理入口，方便在不同机器上重新标定输入框位置
 - 新增本地校准网页，可在浏览器里分析候选输入区、试跑草稿配置并保存
+- 新增 `start-tray.bat` 和托盘程序，可从系统托盘管理服务状态、通知开关与平台配置
+- 新增显示保活和本地管理接口，便于后台常驻运行
 
 ## 消息平台
 
@@ -36,7 +39,7 @@
 - `飞书`: 使用长连接接收私聊文本命令，启动入口为 `startup/start-feishu.bat`
 - `企业微信`: 使用自建应用回调接收命令并回发消息，启动入口为 `startup/start-wecom.bat`
 
-注意：目前仅 `NapCat / QQ` 机器人通信经过实测，除 QQ 外其余平台的机器人通信链路尚未经完整测验。
+注意：目前仅 QQ 和飞书机器人通信经过实测，其余平台的机器人通信链路尚未经完整测验。
 
 通用规则：
 
@@ -77,6 +80,7 @@
 - Node.js 22+
 - 已授予 Windows 通知读取权限
 - 已在需要转发的 IDE 或桌面应用里开启系统通知，至少要允许横幅或通知中心提示
+- 如需使用托盘程序，还需要本机可用的 .NET Framework C# 编译器：`C:\Windows\Microsoft.NET\Framework64\v4.0.30319\csc.exe`
 
 按平台补充：
 
@@ -160,6 +164,20 @@ startup/start-wecom.bat
 npm run dev
 ```
 
+### 托盘程序（可选）
+
+```powershell
+.\start-tray.bat
+```
+
+说明：
+
+- 首次运行会先执行 `scripts/build-tray-app.ps1`，编译生成 `tray/bin/FakeClaw.Tray.exe`
+- 托盘程序会在后台拉起 `node src/index.js`，并通过本地管理接口读取状态
+- 托盘菜单支持查看状态、暂停通知、恢复通知、重启服务、打开配置面板和退出
+- 双击托盘图标可打开配置窗口；点击“保存并应用”后会自动重启服务，使新的 `.env` 配置立即生效
+- 当前平台为 `napcat` 时，托盘启动服务前会尝试按 `NAPCAT_START_SCRIPT` 拉起 NapCat
+
 ## 环境变量
 
 以下变量以 [.env.example](./.env.example) 为准。
@@ -212,8 +230,19 @@ npm run dev
 ### 通知过滤
 
 - `NOTIFY_SOURCE_ALLOWLIST`: 允许转发的通知来源，默认包含 `Code, Cursor, Windsurf, Trae, Kiro, CodeBuddy, Antigravity, JetBrains, Zed, Codex, PowerShell`
+- `NOTIFY_POLL_INTERVAL_MS`: 桌面通知轮询间隔，默认 `1500`
 - `NOTIFY_FILTER_MODE`
 - `NOTIFY_KEYWORDS`
+
+### 本地管理接口
+
+- `ADMIN_CONTROL_HOST`: 本地管理接口监听地址，默认 `127.0.0.1`
+- `ADMIN_CONTROL_PORT`: 本地管理接口端口，默认 `3213`
+
+说明：
+
+- 主要供托盘程序读取 `/admin/status` 并执行暂停/恢复通知等本地控制
+- 建议保持为本机回环地址，不要暴露到公网
 
 ### 远程启动命令
 
@@ -231,6 +260,8 @@ npm run dev
 ### 自动化与截图
 
 - `AUTOMATION_TIMEOUT_MS`: 单次自动化超时，默认 `30000`
+- `KEEP_DISPLAY_AWAKE`: 是否定时发送保活避免显示器自动黑屏，默认 `true`
+- `KEEP_DISPLAY_AWAKE_INTERVAL_SECONDS`: 保活心跳间隔秒数，默认 `30`
 - `SCREENSHOT_DIR`: 截图输出目录
 - `SCREENSHOT_RETENTION`: 截图保留数量
 - `SCREENSHOT_AFTER_ACTION_DELAY_MS`: 粘贴/发送后到截图前的等待时间
@@ -383,16 +414,6 @@ powershell -File .\scripts\calibrate-desktop-automation.ps1 -TargetApp antigravi
 - `Codex`: 相对稳定，默认优先匹配底部编辑器容器
 - `VS Code / Cursor / Trae / Trae CN / Antigravity`: 可用，但依赖聊天面板仍位于窗口右下区域，建议校准后使用
 - `CodeBuddy / CodeBuddy CN`: 适配一般，除了候选匹配还依赖坐标兜底点击，建议保守使用
-
-## 调试笔记
-
-- [消息平台接入说明](./docs/messaging-platforms.md)
-- [桌面 IDE 自动化通用经验](./docs/desktop-ide-automation-shared-notes.md)
-- [Codex Focus 调试经验](./docs/codex-focus-debugging-notes.md)
-- [VS Code Focus 调试经验](./docs/vscode-focus-debugging-notes.md)
-- [Cursor Focus 调试经验](./docs/cursor-focus-debugging-notes.md)
-- [CodeBuddy Focus 调试经验](./docs/codebuddy-focus-debugging-notes.md)
-- [Antigravity Focus 调试经验](./docs/antigravity-focus-debugging-notes.md)
 
 ## 安全说明
 
