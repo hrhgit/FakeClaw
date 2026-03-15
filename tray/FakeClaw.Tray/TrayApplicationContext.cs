@@ -37,6 +37,7 @@ namespace FakeClaw.Tray
             _appIcon = TrayIconFactory.CreateTrayIcon();
             _repoRoot = ResolveRepoRoot();
             _envPath = Path.Combine(_repoRoot, ".env");
+            _currentPlatform = ResolveConfiguredPlatform(EnvFile.Load(_envPath));
             _httpClient = new HttpClient { Timeout = TimeSpan.FromSeconds(2) };
             _serializer = new JavaScriptSerializer();
             _serviceUrlBase = BuildServiceUrlBase();
@@ -99,7 +100,7 @@ namespace FakeClaw.Tray
             }
 
             var env = EnvFile.Load(_envPath);
-            _currentPlatform = NormalizePlatform(env.Get("BOT_PLATFORM", "napcat"));
+            _currentPlatform = ResolveConfiguredPlatform(env);
 
             if (allowNapCatLaunch && _currentPlatform == "napcat" && !_napcatLaunchAttempted)
             {
@@ -210,16 +211,20 @@ namespace FakeClaw.Tray
             {
                 _currentPlatform = NormalizePlatform(status.botPlatform ?? _currentPlatform);
 
-                var statusText = status.notificationsPaused
-                    ? BuildStatusText("通知已暂停", _currentPlatform)
-                    : BuildStatusText(string.Format("运行中 ({0})", status.status ?? "idle"), _currentPlatform);
+                var statusText = _currentPlatform == "none"
+                    ? BuildStatusText("未配置", _currentPlatform)
+                    : status.notificationsPaused
+                        ? BuildStatusText("通知已暂停", _currentPlatform)
+                        : BuildStatusText(string.Format("运行中 ({0})", status.status ?? "idle"), _currentPlatform);
 
                 UpdateMenuState(statusText, status.notificationsPaused, true);
                 _notifyIcon.Text = TrimNotifyText(
                     string.Format(
                         "FakeClaw [{0}] {1}",
                         GetPlatformDisplayName(_currentPlatform),
-                        status.notificationsPaused ? "通知已暂停" : "运行中"
+                        _currentPlatform == "none"
+                            ? "未配置"
+                            : status.notificationsPaused ? "通知已暂停" : "运行中"
                     )
                 );
 
@@ -480,10 +485,53 @@ namespace FakeClaw.Tray
 
         private static string NormalizePlatform(string platform)
         {
-            var normalized = (platform ?? "napcat").Trim().ToLowerInvariant();
-            return normalized == "telegram" || normalized == "feishu" || normalized == "wecom"
+            var normalized = (platform ?? "none").Trim().ToLowerInvariant();
+            return normalized == "telegram" || normalized == "feishu" || normalized == "wecom" || normalized == "none"
                 ? normalized
                 : "napcat";
+        }
+
+        private static string ResolveConfiguredPlatform(EnvFile env)
+        {
+            var selectedPlatform = NormalizePlatform(env.Get("BOT_PLATFORM", string.Empty));
+            if (selectedPlatform == "none")
+            {
+                return "none";
+            }
+
+            return HasPlatformConfiguration(env, selectedPlatform) ? selectedPlatform : "none";
+        }
+
+        private static bool HasPlatformConfiguration(EnvFile env, string platform)
+        {
+            string[] requiredKeys;
+            switch (NormalizePlatform(platform))
+            {
+                case "telegram":
+                    requiredKeys = new[] { "TELEGRAM_BOT_TOKEN", "TELEGRAM_CHAT_ID" };
+                    break;
+                case "feishu":
+                    requiredKeys = new[] { "FEISHU_APP_ID", "FEISHU_APP_SECRET", "FEISHU_OPEN_ID" };
+                    break;
+                case "wecom":
+                    requiredKeys = new[] { "WECOM_CORP_ID", "WECOM_CORP_SECRET", "WECOM_AGENT_ID", "WECOM_USER_ID", "WECOM_TOKEN", "WECOM_ENCODING_AES_KEY" };
+                    break;
+                case "napcat":
+                    requiredKeys = new[] { "NAPCAT_TOKEN", "NAPCAT_START_SCRIPT", "QQ_USER_ID" };
+                    break;
+                default:
+                    return false;
+            }
+
+            foreach (var key in requiredKeys)
+            {
+                if (string.IsNullOrWhiteSpace(env.Get(key, string.Empty)))
+                {
+                    return false;
+                }
+            }
+
+            return true;
         }
 
         private static string BuildStatusText(string statusLabel, string platform)
@@ -495,6 +543,8 @@ namespace FakeClaw.Tray
         {
             switch (NormalizePlatform(platform))
             {
+                case "none":
+                    return "未配置";
                 case "telegram":
                     return "Telegram";
                 case "feishu":

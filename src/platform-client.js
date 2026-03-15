@@ -5,26 +5,56 @@ import { TelegramClient } from "./telegram-client.js";
 import { WecomClient } from "./wecom-client.js";
 
 export const BOT_PLATFORMS = Object.freeze({
+  NONE: "none",
   NAPCAT: "napcat",
   TELEGRAM: "telegram",
   FEISHU: "feishu",
   WECOM: "wecom"
 });
 
-export function resolveBotPlatform(value = process.env.BOT_PLATFORM) {
-  const normalized = String(value || BOT_PLATFORMS.NAPCAT)
+const PLATFORM_REQUIRED_ENV_KEYS = Object.freeze({
+  [BOT_PLATFORMS.NAPCAT]: ["NAPCAT_TOKEN", "NAPCAT_START_SCRIPT", "QQ_USER_ID"],
+  [BOT_PLATFORMS.TELEGRAM]: ["TELEGRAM_BOT_TOKEN", "TELEGRAM_CHAT_ID"],
+  [BOT_PLATFORMS.FEISHU]: ["FEISHU_APP_ID", "FEISHU_APP_SECRET", "FEISHU_OPEN_ID"],
+  [BOT_PLATFORMS.WECOM]: [
+    "WECOM_CORP_ID",
+    "WECOM_CORP_SECRET",
+    "WECOM_AGENT_ID",
+    "WECOM_USER_ID",
+    "WECOM_TOKEN",
+    "WECOM_ENCODING_AES_KEY"
+  ]
+});
+
+function hasRequiredEnvValues(keys = []) {
+  return keys.every((key) => String(process.env[key] || "").trim());
+}
+
+export function hasPlatformConfiguration(platform) {
+  const normalized = String(platform || "")
     .trim()
     .toLowerCase();
 
-  if (Object.values(BOT_PLATFORMS).includes(normalized)) {
+  const requiredKeys = PLATFORM_REQUIRED_ENV_KEYS[normalized];
+  return Boolean(requiredKeys && hasRequiredEnvValues(requiredKeys));
+}
+
+export function resolveBotPlatform(value = process.env.BOT_PLATFORM) {
+  const normalized = String(value || "")
+    .trim()
+    .toLowerCase();
+
+  if (normalized && hasPlatformConfiguration(normalized)) {
     return normalized;
   }
 
-  return BOT_PLATFORMS.NAPCAT;
+  return BOT_PLATFORMS.NONE;
 }
 
 export function getAuthorizedUserId(platform = resolveBotPlatform()) {
   switch (platform) {
+    case BOT_PLATFORMS.NONE:
+      return "";
     case BOT_PLATFORMS.TELEGRAM:
       return process.env.TELEGRAM_CHAT_ID || "";
     case BOT_PLATFORMS.FEISHU:
@@ -39,6 +69,8 @@ export function getAuthorizedUserId(platform = resolveBotPlatform()) {
 
 export function getPlatformBotName(platform = resolveBotPlatform()) {
   switch (platform) {
+    case BOT_PLATFORMS.NONE:
+      return process.env.BOT_NAME || "UnconfiguredBot";
     case BOT_PLATFORMS.TELEGRAM:
       return process.env.TELEGRAM_BOT_NAME || process.env.BOT_NAME || "TelegramBot";
     case BOT_PLATFORMS.FEISHU:
@@ -70,8 +102,41 @@ function forwardClientEvents(source, target) {
   }
 }
 
+class UnconfiguredPlatformClient extends EventEmitter {
+  constructor() {
+    super();
+    this.platform = BOT_PLATFORMS.NONE;
+  }
+
+  connect() {
+    return false;
+  }
+
+  close() {
+    return undefined;
+  }
+
+  isConnected() {
+    return false;
+  }
+
+  sendPrivateText() {
+    return Promise.reject(new Error("bot_platform_not_configured"));
+  }
+
+  sendPrivateSegments() {
+    return Promise.reject(new Error("bot_platform_not_configured"));
+  }
+
+  uploadPrivateFile() {
+    return Promise.reject(new Error("bot_platform_not_configured"));
+  }
+}
+
 function createUnderlyingClient(platform) {
   switch (platform) {
+    case BOT_PLATFORMS.NONE:
+      return new UnconfiguredPlatformClient();
     case BOT_PLATFORMS.TELEGRAM:
       return new TelegramClient({
         botToken: process.env.TELEGRAM_BOT_TOKEN || "",

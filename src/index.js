@@ -24,6 +24,7 @@ import {
 } from "./automation.js";
 import { startCalibrationWebServer } from "./calibration-web.js";
 import {
+  BOT_PLATFORMS,
   createImageSegment,
   createTextSegment,
   getAuthorizedUserId,
@@ -37,6 +38,8 @@ const __dirname = path.dirname(__filename);
 
 const MENU_COMMAND_ZH = "\u83dc\u5355";
 const STATUS_COMMAND_ZH = "\u72b6\u6001";
+const PAUSE_NOTIFICATIONS_COMMAND_ZH = "\u6682\u505c\u901a\u77e5";
+const RESUME_NOTIFICATIONS_COMMAND_ZH = "\u6062\u590d\u901a\u77e5";
 const AUTOMATION_TARGET_CONFIGS = listAutomationTargetConfigs();
 const AUTOMATION_TARGET_DISPLAY_NAMES = Object.fromEntries(
   AUTOMATION_TARGET_CONFIGS.map(({ id, displayName }) => [id, displayName])
@@ -672,9 +675,33 @@ function isManagedCommandText(text) {
     lower === "/screenshot" ||
     parseHelpCommand(trimmed) !== null ||
     parseAutomationCommand(trimmed) !== null ||
+    parseNotificationControlCommand(trimmed) !== null ||
     lower === "/status" ||
     trimmed === STATUS_COMMAND_ZH
   );
+}
+
+function parseNotificationControlCommand(text) {
+  const trimmed = String(text || "").trim();
+  const lower = trimmed.toLowerCase();
+
+  if (
+    trimmed === PAUSE_NOTIFICATIONS_COMMAND_ZH ||
+    lower === "/pause" ||
+    lower === "/pause-notifications"
+  ) {
+    return { action: "pause" };
+  }
+
+  if (
+    trimmed === RESUME_NOTIFICATIONS_COMMAND_ZH ||
+    lower === "/resume" ||
+    lower === "/resume-notifications"
+  ) {
+    return { action: "resume" };
+  }
+
+  return null;
 }
 
 function isAuthorizedPrivateMessage(event) {
@@ -846,6 +873,7 @@ function buildAdminStatusPayload() {
     ok: true,
     status: currentTask ? "busy" : "idle",
     botPlatform,
+    platformConfigured: botPlatform !== BOT_PLATFORMS.NONE,
     botName,
     notificationsPaused,
     listenerRunning: Boolean(listenerProcess && !listenerProcess.killed),
@@ -879,6 +907,8 @@ function buildHelpHomeMessage() {
     "ping",
     "/status",
     "/shot",
+    PAUSE_NOTIFICATIONS_COMMAND_ZH,
+    RESUME_NOTIFICATIONS_COMMAND_ZH,
     "",
     "快速回复:",
     "刚转发过支持远程操作的 IDE 通知时，下一条非命令消息会直接发送到该 IDE",
@@ -893,6 +923,16 @@ function buildHelpHomeMessage() {
   ];
 
   return lines.join("\n");
+}
+
+function buildNotificationControlMessage(action, statusPayload) {
+  const isPause = action === "pause";
+  const statusText = statusPayload?.notificationsPaused ? "paused" : "running";
+
+  return [
+    isPause ? "notifications paused" : "notifications resumed",
+    `notifications: ${statusText}`
+  ].join("\n");
 }
 
 function buildAutomationUsage(targetApp) {
@@ -1238,6 +1278,7 @@ function handleAuthorizedCommand(event, text) {
   const trimmed = text.trim();
   const lower = trimmed.toLowerCase();
   const helpCommand = parseHelpCommand(trimmed);
+  const notificationControlCommand = parseNotificationControlCommand(trimmed);
 
   if (lower === "ping") {
     sendPrivateText(event.user_id, "pong").catch((error) => {
@@ -1256,6 +1297,19 @@ function handleAuthorizedCommand(event, text) {
   if (trimmed === STATUS_COMMAND_ZH || lower === "/status") {
     sendPrivateText(event.user_id, buildStatusMessage()).catch((error) => {
       console.error(`[command] failed to send status: ${error.message}`);
+    });
+    return true;
+  }
+
+  if (notificationControlCommand) {
+    const statusPayload =
+      notificationControlCommand.action === "pause" ? pauseNotifications() : resumeNotifications();
+
+    sendPrivateText(
+      event.user_id,
+      buildNotificationControlMessage(notificationControlCommand.action, statusPayload)
+    ).catch((error) => {
+      console.error(`[command] failed to send notification control result: ${error.message}`);
     });
     return true;
   }
@@ -1747,5 +1801,11 @@ if (CALIBRATION_WEB_ENABLED) {
 
 adminControlServer = startAdminControlServer();
 startKeepDisplayAwakeHelper();
-client.connect();
+
+if (botPlatform === BOT_PLATFORMS.NONE) {
+  console.warn("[bot] no platform is fully configured; bot client startup skipped");
+} else {
+  client.connect();
+}
+
 startToastListener();

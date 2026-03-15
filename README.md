@@ -109,6 +109,29 @@ Copy-Item .env.example .env
 - `feishu`: `FEISHU_APP_ID`、`FEISHU_APP_SECRET`、`FEISHU_OPEN_ID`
 - `wecom`: `WECOM_CORP_ID`、`WECOM_CORP_SECRET`、`WECOM_AGENT_ID`、`WECOM_USER_ID`、`WECOM_TOKEN`、`WECOM_ENCODING_AES_KEY`
 
+### 飞书配置
+
+当前飞书接入方式已经调整为长连接，不再使用本地 webhook。
+
+在飞书开放平台侧至少需要完成：
+
+1. 创建企业自建应用，并启用机器人能力
+2. 为应用开通接收消息所需权限
+3. 在“事件与回调”里把订阅方式切换为“使用长连接接收事件”
+4. 订阅事件 `im.message.receive_v1`
+5. 把机器人添加到可用范围，确保你自己可以给它发私聊消息
+6. 获取自己的 `open_id`，写入 `FEISHU_OPEN_ID`
+
+项目侧只需要保留这些飞书变量：
+
+- `FEISHU_APP_ID`
+- `FEISHU_APP_SECRET`
+- `FEISHU_OPEN_ID`
+- `FEISHU_RECEIVE_ID_TYPE`
+- `FEISHU_API_BASE_URL`
+
+不再需要配置飞书 webhook 地址、端口、路径或 verification token。
+
 ### 启动方式
 
 只启动转发服务：
@@ -170,6 +193,7 @@ npm run dev
 - `FEISHU_OPEN_ID`: 唯一允许执行远程命令、同时接收通知的目标用户
 - `FEISHU_RECEIVE_ID_TYPE`: 默认 `open_id`
 - `FEISHU_API_BASE_URL`: 默认 `https://open.feishu.cn`
+- 飞书当前使用长连接收事件，不需要配置本地 webhook 或 verification token
 
 ### 企业微信
 
@@ -232,6 +256,8 @@ npm run dev
 - `/status`
 - `/help`
 - `/shot`
+- `暂停通知`
+- `恢复通知`
 
 也支持中文入口：
 
@@ -292,7 +318,7 @@ npm run dev
 
 - 当机器人刚转发一条支持远程操作的 IDE 通知后，授权用户发来的下一条非命令私聊会直接按 `send` 发送到该 IDE
 - 当前支持快速回复的通知来源为 `Codex`、`Code`（映射到 `vscode`）、`Cursor`、`Trae`、`CodeBuddy`、`Antigravity`
-- 保留指令集仍优先按原逻辑处理，不会被快速回复接管，包括 `ping`、`菜单`、`/help`、`/status`、`/shot` 和所有 `/<target> ...` 命令
+- 保留指令集仍优先按原逻辑处理，不会被快速回复接管，包括 `ping`、`菜单`、`/help`、`/status`、`/shot`、`暂停通知`、`恢复通知` 和所有 `/<target> ...` 命令
 - 快速回复是一次性的；无论下一条消息是命令还是非命令，都会消耗这次目标记忆，只是只有非命令消息才会真正发送到刚才那条通知对应的 IDE
 
 ## 校准与兼容性

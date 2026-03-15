@@ -44,6 +44,8 @@ FEISHU_OPEN_ID=<your open_id>
 - 长连接模式不需要配置请求地址，也不需要内网穿透
 - 只需要保证本机运行环境可以访问飞书公网
 - 通知和执行结果会回发到 `FEISHU_OPEN_ID`
+- 项目侧只需要 `FEISHU_APP_ID`、`FEISHU_APP_SECRET`、`FEISHU_OPEN_ID`、`FEISHU_RECEIVE_ID_TYPE`、`FEISHU_API_BASE_URL`
+- 不再需要配置飞书 webhook host / port / path / verification token
 
 ## 企业微信
 
