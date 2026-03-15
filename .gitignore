@@ -5,4 +5,5 @@ node_modules/
 .aiassistant.lock
 .fakeclaw.lock
 scripts/bin/
+tray/bin/
 *.log

@@ -1,5 +1,6 @@
 import "dotenv/config";
 import { spawn } from "node:child_process";
+import http from "node:http";
 import {
   closeSync,
   existsSync,
@@ -190,6 +191,8 @@ const AVAILABLE_HELP_TOPICS = [
 const DEDUPE_WINDOW_MS = Number(process.env.NOTIFY_DEDUPE_WINDOW_MS || 10000);
 const NOTIFY_POLL_INTERVAL_MS = Number(process.env.NOTIFY_POLL_INTERVAL_MS || 1500);
 const LISTENER_RESTART_MS = Number(process.env.LISTENER_RESTART_MS || 3000);
+const ADMIN_CONTROL_HOST = process.env.ADMIN_CONTROL_HOST || "127.0.0.1";
+const ADMIN_CONTROL_PORT = Number(process.env.ADMIN_CONTROL_PORT || 3213);
 const POWERSHELL_PATH = process.env.POWERSHELL_PATH || "powershell.exe";
 const FILTER_MODE = process.env.NOTIFY_FILTER_MODE || "all";
 const FILTER_KEYWORDS = parseCsv(process.env.NOTIFY_KEYWORDS);
@@ -201,11 +204,17 @@ const AUTOMATION_TIMEOUT_MS = Number(process.env.AUTOMATION_TIMEOUT_MS || 30000)
 const SCREENSHOT_DIR = process.env.SCREENSHOT_DIR || "";
 const SCREENSHOT_RETENTION = Number(process.env.SCREENSHOT_RETENTION || 20);
 const CALIBRATION_WEB_ENABLED = process.env.CALIBRATION_WEB_ENABLED !== "false";
+const KEEP_DISPLAY_AWAKE_ENABLED = parseBooleanEnv(process.env.KEEP_DISPLAY_AWAKE, true);
+const KEEP_DISPLAY_AWAKE_INTERVAL_SECONDS = Math.max(
+  5,
+  Number(process.env.KEEP_DISPLAY_AWAKE_INTERVAL_SECONDS || 30) || 30
+);
 
 const botPlatform = resolveBotPlatform();
 const authorizedUserId = getAuthorizedUserId(botPlatform);
 const botName = getPlatformBotName(botPlatform);
 const listenerScriptPath = path.resolve(__dirname, "../scripts/windows-toast-listener.ps1");
+const keepDisplayAwakeScriptPath = path.resolve(__dirname, "../scripts/keep-display-awake.ps1");
 const instanceLockPath = path.resolve(__dirname, "../.fakeclaw.lock");
 
 const client = new PlatformClient({ platform: botPlatform });
@@ -214,11 +223,22 @@ const pendingQuickReplies = new Map();
 
 let listenerProcess;
 let listenerRestartTimer;
+let keepDisplayAwakeProcess;
+let keepDisplayAwakeRestartTimer;
 let targetWarningShown = false;
 let instanceLockFd;
 let taskCounter = 0;
 let currentTask = null;
 let calibrationWebServer;
+let adminControlServer;
+let notificationsPaused = false;
+let listenerShouldRun = true;
+let lastBotError = "";
+let lastListenerError = "";
+let lastAdminError = "";
+let lastKeepAwakeError = "";
+let keepDisplayAwakeShouldRun = KEEP_DISPLAY_AWAKE_ENABLED;
+const serviceStartedAt = new Date().toISOString();
 
 function getTargetDisplayName(targetApp) {
   return AUTOMATION_TARGET_DISPLAY_NAMES[targetApp] || String(targetApp || "").trim() || "Unknown";
@@ -336,6 +356,28 @@ function parseCsv(value, fallback = []) {
     .split(",")
     .map((item) => item.trim())
     .filter(Boolean);
+}
+
+function parseBooleanEnv(value, fallback = false) {
+  if (value === undefined || value === null || value === "") {
+    return fallback;
+  }
+
+  const normalized = String(value).trim().toLowerCase();
+
+  if (["1", "true", "yes", "on"].includes(normalized)) {
+    return true;
+  }
+
+  if (["0", "false", "no", "off"].includes(normalized)) {
+    return false;
+  }
+
+  return fallback;
+}
+
+function isChildProcessRunning(childProcess) {
+  return Boolean(childProcess && childProcess.exitCode === null && !childProcess.killed);
 }
 
 function normalizeSourceName(value) {
@@ -765,10 +807,18 @@ function buildBusyRejectedMessage(task) {
 }
 
 function buildStatusMessage() {
+  const displayAwakeStatus = !KEEP_DISPLAY_AWAKE_ENABLED
+    ? "disabled"
+    : isChildProcessRunning(keepDisplayAwakeProcess)
+      ? "running"
+      : "recovering";
+
   if (!currentTask) {
     return [
       `${botName} status`,
       "state: idle",
+      `notifications: ${notificationsPaused ? "paused" : "running"}`,
+      `displayAwake: ${displayAwakeStatus}`,
       `targets: ${AUTOMATION_TARGET_CONFIGS.map(({ displayName }) => displayName).join(", ")}`
     ].join("\n");
   }
@@ -776,6 +826,8 @@ function buildStatusMessage() {
   return [
     `${botName} status`,
     "state: busy",
+    `notifications: ${notificationsPaused ? "paused" : "running"}`,
+    `displayAwake: ${displayAwakeStatus}`,
     `taskId: ${currentTask.taskId}`,
     `target: ${currentTask.targetApp}`,
     `mode: ${formatModeLabel(currentTask.mode)}`,
@@ -783,6 +835,37 @@ function buildStatusMessage() {
     `startedAt: ${formatTimestamp(currentTask.startedAt)}`,
     `promptPreview: ${currentTask.promptPreview || "-"}`
   ].join("\n");
+}
+
+function getLastErrorSummary() {
+  return lastAdminError || lastListenerError || lastBotError || lastKeepAwakeError || "";
+}
+
+function buildAdminStatusPayload() {
+  return {
+    ok: true,
+    status: currentTask ? "busy" : "idle",
+    botPlatform,
+    botName,
+    notificationsPaused,
+    listenerRunning: Boolean(listenerProcess && !listenerProcess.killed),
+    keepDisplayAwakeEnabled: KEEP_DISPLAY_AWAKE_ENABLED,
+    keepDisplayAwakeRunning: isChildProcessRunning(keepDisplayAwakeProcess),
+    clientConnected: typeof client.isConnected === "function" ? client.isConnected() : false,
+    currentTask: currentTask
+      ? {
+          taskId: currentTask.taskId,
+          targetApp: currentTask.targetApp,
+          mode: currentTask.mode,
+          phase: currentTask.phase,
+          startedAt: currentTask.startedAt,
+          promptPreview: currentTask.promptPreview
+        }
+      : null,
+    authorizedUserId: authorizedUserId || "",
+    serviceStartedAt,
+    lastError: getLastErrorSummary()
+  };
 }
 
 function isSourceEnabled(sourceLabel) {
@@ -1250,6 +1333,10 @@ function handleEvent(event) {
 }
 
 function handleNotificationPayload(payload) {
+  if (notificationsPaused) {
+    return;
+  }
+
   const notification = normalizeNotificationPayload(payload);
 
   if (!notification) {
@@ -1288,6 +1375,27 @@ function handleNotificationPayload(payload) {
     });
 }
 
+function sendAdminJson(response, statusCode, payload) {
+  response.writeHead(statusCode, {
+    "Content-Type": "application/json; charset=utf-8",
+    "Cache-Control": "no-store"
+  });
+  response.end(JSON.stringify(payload));
+}
+
+function stopToastListener(reason = "manual_stop") {
+  listenerShouldRun = false;
+  clearTimeout(listenerRestartTimer);
+
+  if (!listenerProcess || listenerProcess.killed) {
+    return false;
+  }
+
+  console.log(`[listener] stopping (${reason})`);
+  listenerProcess.kill();
+  return true;
+}
+
 function handleListenerLine(line) {
   const trimmed = String(line || "").trim();
 
@@ -1304,20 +1412,133 @@ function handleListenerLine(line) {
 }
 
 function scheduleListenerRestart() {
+  if (!listenerShouldRun || notificationsPaused) {
+    return;
+  }
+
   clearTimeout(listenerRestartTimer);
   listenerRestartTimer = setTimeout(() => {
     startToastListener();
   }, LISTENER_RESTART_MS);
 }
 
+function stopKeepDisplayAwakeHelper(reason = "manual_stop") {
+  keepDisplayAwakeShouldRun = false;
+  clearTimeout(keepDisplayAwakeRestartTimer);
+
+  if (!isChildProcessRunning(keepDisplayAwakeProcess)) {
+    keepDisplayAwakeProcess = undefined;
+    return false;
+  }
+
+  console.log(`[keep-awake] stopping (${reason})`);
+  keepDisplayAwakeProcess.kill();
+  return true;
+}
+
+function scheduleKeepDisplayAwakeRestart() {
+  if (!KEEP_DISPLAY_AWAKE_ENABLED || !keepDisplayAwakeShouldRun) {
+    return;
+  }
+
+  clearTimeout(keepDisplayAwakeRestartTimer);
+  keepDisplayAwakeRestartTimer = setTimeout(() => {
+    startKeepDisplayAwakeHelper();
+  }, LISTENER_RESTART_MS);
+}
+
+function startKeepDisplayAwakeHelper() {
+  if (!KEEP_DISPLAY_AWAKE_ENABLED || !keepDisplayAwakeShouldRun) {
+    return;
+  }
+
+  if (process.platform !== "win32") {
+    console.warn("[keep-awake] Windows only; helper not started");
+    lastKeepAwakeError = "windows_only";
+    return;
+  }
+
+  if (!existsSync(keepDisplayAwakeScriptPath)) {
+    lastKeepAwakeError = `missing_script:${keepDisplayAwakeScriptPath}`;
+    console.error(`[keep-awake] missing script: ${keepDisplayAwakeScriptPath}`);
+    return;
+  }
+
+  if (isChildProcessRunning(keepDisplayAwakeProcess)) {
+    return;
+  }
+
+  const args = [
+    "-NoProfile",
+    "-ExecutionPolicy",
+    "Bypass",
+    "-File",
+    keepDisplayAwakeScriptPath,
+    "-IntervalSeconds",
+    String(KEEP_DISPLAY_AWAKE_INTERVAL_SECONDS)
+  ];
+
+  keepDisplayAwakeProcess = spawn(POWERSHELL_PATH, args, {
+    cwd: path.resolve(__dirname, ".."),
+    stdio: ["ignore", "pipe", "pipe"],
+    windowsHide: true
+  });
+  lastKeepAwakeError = "";
+
+  const stdout = createInterface({ input: keepDisplayAwakeProcess.stdout });
+  const stderr = createInterface({ input: keepDisplayAwakeProcess.stderr });
+
+  stdout.on("line", (line) => {
+    const message = String(line || "").trim();
+
+    if (message) {
+      console.log(message);
+    }
+  });
+
+  stderr.on("line", (line) => {
+    const message = String(line || "").trim();
+
+    if (message) {
+      lastKeepAwakeError = message;
+      console.error(`[keep-awake] ${message}`);
+    }
+  });
+
+  keepDisplayAwakeProcess.on("error", (error) => {
+    lastKeepAwakeError = error.message || "keep_awake_error";
+    console.error(`[keep-awake] process error: ${lastKeepAwakeError}`);
+  });
+
+  keepDisplayAwakeProcess.on("exit", (code, signal) => {
+    stdout.close();
+    stderr.close();
+    keepDisplayAwakeProcess = undefined;
+
+    if (!keepDisplayAwakeShouldRun) {
+      return;
+    }
+
+    lastKeepAwakeError = `keep_awake_exit:${code ?? "null"}/${signal ?? "null"}`;
+    console.warn(`[keep-awake] exited (code=${code ?? "null"}, signal=${signal ?? "null"})`);
+    scheduleKeepDisplayAwakeRestart();
+  });
+}
+
 function startToastListener() {
+  if (!listenerShouldRun || notificationsPaused) {
+    return;
+  }
+
   if (process.platform !== "win32") {
     console.warn("[listener] Windows only; toast listener not started");
+    lastListenerError = "windows_only";
     return;
   }
 
   if (!existsSync(listenerScriptPath)) {
     console.error(`[listener] missing script: ${listenerScriptPath}`);
+    lastListenerError = `missing_script:${listenerScriptPath}`;
     return;
   }
 
@@ -1342,6 +1563,7 @@ function startToastListener() {
     stdio: ["ignore", "pipe", "pipe"],
     windowsHide: true
   });
+  lastListenerError = "";
 
   console.log(`[listener] started with sources: ${SOURCE_ALLOWLIST.join(", ")}`);
 
@@ -1358,6 +1580,7 @@ function startToastListener() {
   });
 
   listenerProcess.on("error", (error) => {
+    lastListenerError = error.message;
     console.error(`[listener] process error: ${error.message}`);
   });
 
@@ -1367,21 +1590,117 @@ function startToastListener() {
     listenerProcess = undefined;
 
     console.warn(`[listener] exited (code=${code ?? "null"}, signal=${signal ?? "null"})`);
-    scheduleListenerRestart();
+    if (listenerShouldRun && !notificationsPaused) {
+      lastListenerError = `listener_exit:${code ?? "null"}/${signal ?? "null"}`;
+      scheduleListenerRestart();
+    }
   });
+}
+
+function pauseNotifications() {
+  if (notificationsPaused) {
+    return buildAdminStatusPayload();
+  }
+
+  notificationsPaused = true;
+  stopToastListener("notifications_paused");
+  console.log("[notify] notifications paused");
+  return buildAdminStatusPayload();
+}
+
+function resumeNotifications() {
+  if (!notificationsPaused) {
+    listenerShouldRun = true;
+    startToastListener();
+    return buildAdminStatusPayload();
+  }
+
+  notificationsPaused = false;
+  listenerShouldRun = true;
+  startToastListener();
+  console.log("[notify] notifications resumed");
+  return buildAdminStatusPayload();
+}
+
+function startAdminControlServer() {
+  const server = http.createServer((request, response) => {
+    try {
+      const method = String(request.method || "GET").toUpperCase();
+      const url = new URL(request.url || "/", `http://${ADMIN_CONTROL_HOST}:${ADMIN_CONTROL_PORT}`);
+      const remoteAddress = String(request.socket.remoteAddress || "");
+
+      if (remoteAddress && remoteAddress !== "127.0.0.1" && remoteAddress !== "::1" && remoteAddress !== "::ffff:127.0.0.1") {
+        sendAdminJson(response, 403, {
+          ok: false,
+          error: "forbidden"
+        });
+        return;
+      }
+
+      if (method === "GET" && url.pathname === "/admin/status") {
+        sendAdminJson(response, 200, buildAdminStatusPayload());
+        return;
+      }
+
+      if (method === "POST" && url.pathname === "/admin/notifications/pause") {
+        sendAdminJson(response, 200, pauseNotifications());
+        return;
+      }
+
+      if (method === "POST" && url.pathname === "/admin/notifications/resume") {
+        sendAdminJson(response, 200, resumeNotifications());
+        return;
+      }
+
+      if (method === "POST" && url.pathname === "/admin/shutdown") {
+        sendAdminJson(response, 200, {
+          ok: true,
+          shuttingDown: true
+        });
+        setImmediate(() => shutdown("admin"));
+        return;
+      }
+
+      sendAdminJson(response, 404, {
+        ok: false,
+        error: "not_found"
+      });
+    } catch (error) {
+      lastAdminError = error.message || "admin_request_failed";
+      sendAdminJson(response, 500, {
+        ok: false,
+        error: lastAdminError
+      });
+    }
+  });
+
+  server.on("error", (error) => {
+    lastAdminError = error.message;
+    console.error(`[admin] error: ${error.message}`);
+  });
+
+  server.listen(ADMIN_CONTROL_PORT, ADMIN_CONTROL_HOST, () => {
+    lastAdminError = "";
+    console.log(`[admin] listening on http://${ADMIN_CONTROL_HOST}:${ADMIN_CONTROL_PORT}`);
+  });
+
+  return server;
 }
 
 function shutdown(signal) {
   console.log(`[app] received ${signal}, shutting down`);
   clearTimeout(listenerRestartTimer);
-
-  if (listenerProcess && !listenerProcess.killed) {
-    listenerProcess.kill();
-  }
+  stopToastListener("shutdown");
+  stopKeepDisplayAwakeHelper("shutdown");
 
   if (calibrationWebServer) {
     calibrationWebServer.close();
     calibrationWebServer = undefined;
+  }
+
+  if (adminControlServer) {
+    adminControlServer.close();
+    adminControlServer = undefined;
   }
 
   client.close();
@@ -1394,6 +1713,7 @@ if (!ensureSingleInstance()) {
 }
 
 client.on("open", (url) => {
+  lastBotError = "";
   console.log(`[bot] ${botPlatform} connected: ${url}`);
 });
 
@@ -1402,10 +1722,12 @@ client.on("close", () => {
 });
 
 client.on("error", (error) => {
+  lastBotError = error.message || "bot_error";
   console.error(`[bot] ${botPlatform} error`, error.message);
 });
 
 client.on("invalid-payload", (error, rawPayload) => {
+  lastBotError = error.message || "invalid_payload";
   console.error(`[bot] invalid payload: ${error.message} raw=${rawPayload}`);
 });
 
@@ -1423,5 +1745,7 @@ if (CALIBRATION_WEB_ENABLED) {
   });
 }
 
+adminControlServer = startAdminControlServer();
+startKeepDisplayAwakeHelper();
 client.connect();
 startToastListener();

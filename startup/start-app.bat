@@ -1,7 +1,10 @@
 @echo off
 setlocal
 
-cd /d "%~dp0"
+set "SCRIPT_DIR=%~dp0"
+for %%I in ("%SCRIPT_DIR%..") do set "REPO_ROOT=%%~fI"
+
+cd /d "%REPO_ROOT%"
 
 if "%BOT_PLATFORM%"=="" set "BOT_PLATFORM=napcat"
 

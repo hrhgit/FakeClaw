@@ -1,7 +1,11 @@
 @echo off
 setlocal EnableExtensions EnableDelayedExpansion
 
-cd /d "%~dp0"
+set "STARTUP_DIR=%~dp0"
+for %%I in ("%STARTUP_DIR%..\\scripts") do set "SCRIPTS_DIR=%%~fI"
+for %%I in ("%STARTUP_DIR%..") do set "REPO_ROOT=%%~fI"
+
+cd /d "%REPO_ROOT%"
 
 set "TARGET_APP=%~1"
 set "MODE=%~2"
@@ -81,7 +85,7 @@ if /I "%OPEN_IF_MISSING%"=="Y" (
 )
 echo.
 
-powershell -ExecutionPolicy Bypass -File "%~dp0scripts\calibrate-desktop-automation.ps1" %SCRIPT_ARGS%
+powershell -ExecutionPolicy Bypass -File "%SCRIPTS_DIR%\\calibrate-desktop-automation.ps1" %SCRIPT_ARGS%
 
 set "EXIT_CODE=%ERRORLEVEL%"
 echo.

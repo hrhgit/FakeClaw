@@ -1,7 +1,8 @@
-import { createServer } from "node:http";
 import { basename } from "node:path";
 import { EventEmitter } from "node:events";
 import { openAsBlob } from "node:fs";
+import { WebSocket } from "ws";
+import * as lark from "@larksuiteoapi/node-sdk";
 
 function buildFeishuError(message, payload) {
   const error = new Error(message);
@@ -14,10 +15,6 @@ export class FeishuClient extends EventEmitter {
     appId,
     appSecret,
     openId,
-    verificationToken,
-    webhookHost = "127.0.0.1",
-    webhookPort = 3211,
-    webhookPath = "/feishu/events",
     apiBaseUrl = "https://open.feishu.cn",
     receiveIdType = "open_id"
   }) {
@@ -25,13 +22,10 @@ export class FeishuClient extends EventEmitter {
     this.appId = appId || "";
     this.appSecret = appSecret || "";
     this.openId = openId || "";
-    this.verificationToken = verificationToken || "";
-    this.webhookHost = webhookHost || "127.0.0.1";
-    this.webhookPort = Number(webhookPort) || 3211;
-    this.webhookPath = webhookPath || "/feishu/events";
     this.apiBaseUrl = String(apiBaseUrl || "https://open.feishu.cn").replace(/\/+$/, "");
     this.receiveIdType = receiveIdType || "open_id";
-    this.server = undefined;
+    this.wsClient = undefined;
+    this.connectPromise = undefined;
     this.tokenCache = {
       value: "",
       expiresAt: 0
@@ -43,7 +37,8 @@ export class FeishuClient extends EventEmitter {
   }
 
   isConnected() {
-    return Boolean(this.server?.listening);
+    const wsInstance = this.wsClient?.wsConfig?.getWSInstance?.();
+    return wsInstance?.readyState === WebSocket.OPEN;
   }
 
   connect() {
@@ -53,119 +48,48 @@ export class FeishuClient extends EventEmitter {
       throw error;
     }
 
-    if (this.server) {
+    if (this.wsClient || this.connectPromise) {
       return;
     }
 
-    this.server = createServer((request, response) => {
-      this.handleRequest(request, response).catch((error) => {
+    const eventDispatcher = new lark.EventDispatcher({}).register({
+      "im.message.receive_v1": async (event) => {
+        this.handleMessageEvent(event);
+      }
+    });
+
+    this.wsClient = new lark.WSClient({
+      appId: this.appId,
+      appSecret: this.appSecret,
+      domain: lark.Domain.Feishu,
+      loggerLevel: lark.LoggerLevel.warn
+    });
+
+    this.connectPromise = this.wsClient
+      .start({ eventDispatcher })
+      .then(() => {
+        this.emit("open", "feishu://long-connection");
+      })
+      .catch((error) => {
+        this.wsClient = undefined;
         this.emit("error", error);
-
-        if (!response.headersSent) {
-          response.writeHead(500, { "content-type": "application/json; charset=utf-8" });
-        }
-
-        response.end(JSON.stringify({ code: 500, msg: error.message }));
+      })
+      .finally(() => {
+        this.connectPromise = undefined;
       });
-    });
-
-    this.server.listen(this.webhookPort, this.webhookHost, () => {
-      this.emit("open", `http://${this.webhookHost}:${this.webhookPort}${this.webhookPath}`);
-    });
-
-    this.server.on("close", () => {
-      this.emit("close");
-    });
-
-    this.server.on("error", (error) => {
-      this.emit("error", error);
-    });
   }
 
   close() {
-    if (this.server) {
-      this.server.close();
-      this.server = undefined;
+    if (this.wsClient) {
+      this.wsClient.close({ force: true });
+      this.wsClient = undefined;
     }
+
+    this.connectPromise = undefined;
+    this.emit("close");
   }
 
-  async handleRequest(request, response) {
-    if (request.method !== "POST" || request.url !== this.webhookPath) {
-      response.writeHead(404, { "content-type": "application/json; charset=utf-8" });
-      response.end(JSON.stringify({ code: 404, msg: "not_found" }));
-      return;
-    }
-
-    const body = await this.readJsonBody(request);
-    const verificationPayload = this.resolveVerificationPayload(body);
-
-    if (verificationPayload?.challenge) {
-      response.writeHead(200, { "content-type": "application/json; charset=utf-8" });
-      response.end(JSON.stringify({ challenge: verificationPayload.challenge }));
-      return;
-    }
-
-    this.validateVerificationToken(body);
-    response.writeHead(200, { "content-type": "application/json; charset=utf-8" });
-    response.end(JSON.stringify({ code: 0 }));
-
-    this.handleEventPayload(body);
-  }
-
-  async readJsonBody(request) {
-    const chunks = [];
-
-    for await (const chunk of request) {
-      chunks.push(Buffer.from(chunk));
-    }
-
-    const raw = Buffer.concat(chunks).toString("utf8").trim();
-
-    if (!raw) {
-      return {};
-    }
-
-    try {
-      return JSON.parse(raw);
-    } catch (error) {
-      throw buildFeishuError(`Invalid Feishu webhook payload: ${error.message}`);
-    }
-  }
-
-  resolveVerificationPayload(body) {
-    if (body?.type === "url_verification" && body?.challenge) {
-      return body;
-    }
-
-    if (body?.schema === "2.0" && body?.challenge) {
-      return body;
-    }
-
-    return null;
-  }
-
-  validateVerificationToken(body) {
-    if (!this.verificationToken) {
-      return;
-    }
-
-    const receivedToken = body?.token || body?.header?.token || "";
-
-    if (receivedToken && receivedToken === this.verificationToken) {
-      return;
-    }
-
-    throw buildFeishuError("Invalid FEISHU_VERIFICATION_TOKEN");
-  }
-
-  handleEventPayload(body) {
-    const eventType = body?.header?.event_type || body?.event?.type || "";
-
-    if (eventType !== "im.message.receive_v1") {
-      return;
-    }
-
-    const event = body?.event || {};
+  handleMessageEvent(event) {
     const message = event?.message || {};
     const sender = event?.sender || {};
     const senderId = sender?.sender_id || {};
@@ -197,7 +121,7 @@ export class FeishuClient extends EventEmitter {
       user_id: String(openId),
       raw_message: text,
       platform: "feishu",
-      feishu_event: body
+      feishu_event: event
     });
   }
 

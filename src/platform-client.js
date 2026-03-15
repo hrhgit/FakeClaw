@@ -84,10 +84,6 @@ function createUnderlyingClient(platform) {
         appId: process.env.FEISHU_APP_ID || "",
         appSecret: process.env.FEISHU_APP_SECRET || "",
         openId: process.env.FEISHU_OPEN_ID || "",
-        verificationToken: process.env.FEISHU_VERIFICATION_TOKEN || "",
-        webhookHost: process.env.FEISHU_WEBHOOK_HOST || "127.0.0.1",
-        webhookPort: process.env.FEISHU_WEBHOOK_PORT || 3211,
-        webhookPath: process.env.FEISHU_WEBHOOK_PATH || "/feishu/events",
         apiBaseUrl: process.env.FEISHU_API_BASE_URL || "https://open.feishu.cn",
         receiveIdType: process.env.FEISHU_RECEIVE_ID_TYPE || "open_id"
       });

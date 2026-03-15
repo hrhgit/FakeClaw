@@ -15,6 +15,6 @@ if "%BOT_PLATFORM%"=="" (
 if "%BOT_PLATFORM_LABEL%"=="" set "BOT_PLATFORM_LABEL=%BOT_PLATFORM%"
 
 echo [start] Launching FakeClaw service for %BOT_PLATFORM_LABEL%...
-call "%~dp0\..\start-app.bat"
+call "%~dp0..\\startup\\start-app.bat"
 
 exit /b %ERRORLEVEL%

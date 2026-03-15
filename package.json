@@ -8,6 +8,7 @@
     "dev": "node --watch src/index.js"
   },
   "dependencies": {
+    "@larksuiteoapi/node-sdk": "^1.59.0",
     "dotenv": "^16.6.1",
     "ws": "^8.18.3"
   }

@@ -86,7 +86,7 @@
   - `selectedControlType = CoordinateFallback`
   - `selectedClassName = CoordinateFallback`
   - `bounds = Left 1632.114 / Top 850.92 / Width 24 / Height 24`
-- `calibrate-desktop-automation.bat codebuddy calibrate n` 已成功写回配置
+- `startup/calibrate-desktop-automation.bat codebuddy calibrate n` 已成功写回配置
 
 ## 当前假设与风险
 

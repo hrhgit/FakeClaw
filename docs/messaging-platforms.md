@@ -1,13 +1,13 @@
 # Messaging Platforms
 
-项目现在支持按平台切换消息入口，桌面通知转发、`/help`、`/status`、`/shot` 和 IDE 自动化命令复用同一套逻辑。
+项目支持按平台切换消息入口，桌面通知转发、`/help`、`/status`、`/shot` 和 IDE 自动化命令共用同一套逻辑。
 
 ## 启动脚本
 
-- `start-qq.bat`: QQ / NapCat 模式，会先拉起 NapCat，再启动服务
-- `start-telegram.bat`: Telegram 模式，只启动服务
-- `start-feishu.bat`: 飞书模式，只启动服务
-- `start-wecom.bat`: 企业微信模式，只启动服务
+- `startup/start-qq.bat`: QQ / NapCat 模式，会先拉起 NapCat，再启动服务
+- `startup/start-telegram.bat`: Telegram 模式，只启动服务
+- `startup/start-feishu.bat`: 飞书模式，只启动服务
+- `startup/start-wecom.bat`: 企业微信模式，只启动服务
 
 ## Telegram
 
@@ -34,18 +34,15 @@ BOT_PLATFORM=feishu
 FEISHU_APP_ID=<app id>
 FEISHU_APP_SECRET=<app secret>
 FEISHU_OPEN_ID=<your open_id>
-FEISHU_VERIFICATION_TOKEN=<event token>
-FEISHU_WEBHOOK_HOST=127.0.0.1
-FEISHU_WEBHOOK_PORT=3211
-FEISHU_WEBHOOK_PATH=/feishu/events
 ```
 
 说明：
 
-- 当前实现使用飞书事件订阅回调接收私聊文本命令
-- 你需要把事件订阅地址指向 `http://<host>:<port><path>`
-- 如果飞书后台需要公网地址，需要你自己再套一层内网穿透或反向代理
-- 建议事件订阅关闭加密，只保留 verification token 校验
+- 当前实现使用飞书长连接接收私聊文本命令
+- 飞书后台需要把订阅方式切换为“使用长连接接收事件”
+- 飞书后台仍然需要订阅 `im.message.receive_v1`
+- 长连接模式不需要配置请求地址，也不需要内网穿透
+- 只需要保证本机运行环境可以访问飞书公网
 - 通知和执行结果会回发到 `FEISHU_OPEN_ID`
 
 ## 企业微信
@@ -88,5 +85,5 @@ QQ_USER_ID=<your qq user id>
 
 说明：
 
-- 逻辑和原来保持一致
-- `start-qq.bat` 会自动先拉起 NapCat
+- 逻辑与原方案保持一致
+- `startup/start-qq.bat` 会自动先拉起 NapCat

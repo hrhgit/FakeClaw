@@ -1,7 +1,11 @@
 @echo off
 setlocal EnableExtensions
 
-cd /d "%~dp0"
+set "STARTUP_DIR=%~dp0"
+for %%I in ("%STARTUP_DIR%..\\scripts") do set "SCRIPTS_DIR=%%~fI"
+for %%I in ("%STARTUP_DIR%..") do set "REPO_ROOT=%%~fI"
+
+cd /d "%REPO_ROOT%"
 set "BOT_PLATFORM=napcat"
 set "NAPCAT_SCRIPT="
 set "NAPCAT_DIR="
@@ -52,7 +56,7 @@ echo [start] Launching NapCat in a separate window...
 start "NapCat" /d "%NAPCAT_DIR%" "%ComSpec%" /k call "%NAPCAT_SCRIPT%"
 
 echo [start] Launching notification forwarder in a separate window...
-start "FakeClaw Service (QQ)" /d "%~dp0" "%ComSpec%" /k call "%~dp0scripts\start-service-window.bat" "%BOT_PLATFORM%" QQ
+start "FakeClaw Service (QQ)" /d "%REPO_ROOT%" "%ComSpec%" /k call "%SCRIPTS_DIR%\start-service-window.bat" "%BOT_PLATFORM%" QQ
 
 echo [done] Both windows were opened.
 echo [hint] The service window will keep retrying until NapCat websocket becomes available.

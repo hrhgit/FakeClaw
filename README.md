@@ -19,8 +19,8 @@
 ## 本次更新
 
 - 新增统一消息平台抽象，可在 `NapCat / QQ`、`Telegram`、`飞书`、`企业微信` 之间切换
-- 新增 `start-qq.bat`、`start-telegram.bat`、`start-feishu.bat`、`start-wecom.bat` 启动入口
-- 扩展 `.env.example`，补齐各平台机器人、回调地址和鉴权相关配置
+- 新增 `startup/start-qq.bat`、`startup/start-telegram.bat`、`startup/start-feishu.bat`、`startup/start-wecom.bat` 启动入口
+- 扩展 `.env.example`，补齐各平台机器人与鉴权相关配置
 - 新增 [docs/messaging-platforms.md](./docs/messaging-platforms.md)，汇总各平台接入说明
 - 远程操作目标从原先的少数桌面应用扩展到 `Codex / VS Code / Cursor / Trae / Trae CN / CodeBuddy / CodeBuddy CN / Antigravity`
 - 统一了桌面自动化配置，布局阈值集中放在 [config/desktop-automation.config.json](./config/desktop-automation.config.json)
@@ -31,10 +31,10 @@
 
 支持的平台与入口：
 
-- `NapCat / QQ`: 默认模式，使用 WebSocket 收发消息，`start-qq.bat` 会先拉起 NapCat 再启动服务
-- `Telegram`: 使用 Bot API 长轮询收发私聊消息，启动入口为 `start-telegram.bat`
-- `飞书`: 使用事件订阅回调接收私聊文本命令，启动入口为 `start-feishu.bat`
-- `企业微信`: 使用自建应用回调接收命令并回发消息，启动入口为 `start-wecom.bat`
+- `NapCat / QQ`: 默认模式，使用 WebSocket 收发消息，`startup/start-qq.bat` 会先拉起 NapCat 再启动服务
+- `Telegram`: 使用 Bot API 长轮询收发私聊消息，启动入口为 `startup/start-telegram.bat`
+- `飞书`: 使用长连接接收私聊文本命令，启动入口为 `startup/start-feishu.bat`
+- `企业微信`: 使用自建应用回调接收命令并回发消息，启动入口为 `startup/start-wecom.bat`
 
 注意：目前仅 `NapCat / QQ` 机器人通信经过实测，除 QQ 外其余平台的机器人通信链路尚未经完整测验。
 
@@ -82,7 +82,8 @@
 
 - `NapCat / QQ` 模式需要本机已安装并登录 NapCat
 - `Telegram` 模式需要可用的 Bot Token 和私聊 Chat ID
-- `飞书` / `企业微信` 模式需要本机或代理可接收平台事件回调
+- `飞书` 模式需要本机可访问公网并在飞书后台启用长连接接收事件
+- `企业微信` 模式需要本机或代理可接收平台事件回调
 
 NapCat 项目：
 
@@ -105,7 +106,7 @@ Copy-Item .env.example .env
 
 - `napcat`: `NAPCAT_TOKEN`、`NAPCAT_START_SCRIPT`、`QQ_USER_ID`
 - `telegram`: `TELEGRAM_BOT_TOKEN`、`TELEGRAM_CHAT_ID`
-- `feishu`: `FEISHU_APP_ID`、`FEISHU_APP_SECRET`、`FEISHU_OPEN_ID`、`FEISHU_VERIFICATION_TOKEN`
+- `feishu`: `FEISHU_APP_ID`、`FEISHU_APP_SECRET`、`FEISHU_OPEN_ID`
 - `wecom`: `WECOM_CORP_ID`、`WECOM_CORP_SECRET`、`WECOM_AGENT_ID`、`WECOM_USER_ID`、`WECOM_TOKEN`、`WECOM_ENCODING_AES_KEY`
 
 ### 启动方式
@@ -113,21 +114,21 @@ Copy-Item .env.example .env
 只启动转发服务：
 
 ```powershell
-start-app.bat
+startup/start-app.bat
 ```
 
 按平台启动：
 
 ```powershell
-start-qq.bat
-start-telegram.bat
-start-feishu.bat
-start-wecom.bat
+startup/start-qq.bat
+startup/start-telegram.bat
+startup/start-feishu.bat
+startup/start-wecom.bat
 ```
 
 说明：
 
-- `start-qq.bat` 会先启动 NapCat，再启动转发服务
+- `startup/start-qq.bat` 会先启动 NapCat，再启动转发服务
 - 其他平台脚本只启动转发服务，并在脚本内设置对应 `BOT_PLATFORM`
 
 开发模式：
@@ -168,10 +169,6 @@ npm run dev
 - `FEISHU_APP_SECRET`
 - `FEISHU_OPEN_ID`: 唯一允许执行远程命令、同时接收通知的目标用户
 - `FEISHU_RECEIVE_ID_TYPE`: 默认 `open_id`
-- `FEISHU_VERIFICATION_TOKEN`: 事件订阅 token
-- `FEISHU_WEBHOOK_HOST`: 本地事件监听地址，默认 `127.0.0.1`
-- `FEISHU_WEBHOOK_PORT`: 本地事件监听端口，默认 `3211`
-- `FEISHU_WEBHOOK_PATH`: 默认 `/feishu/events`
 - `FEISHU_API_BASE_URL`: 默认 `https://open.feishu.cn`
 
 ### 企业微信
@@ -331,8 +328,8 @@ http://127.0.0.1:3210/calibration/
 ### 批处理入口
 
 ```bat
-calibrate-desktop-automation.bat
-calibrate-desktop-automation.bat antigravity calibrate y
+startup/calibrate-desktop-automation.bat
+startup/calibrate-desktop-automation.bat antigravity calibrate y
 ```
 
 ### PowerShell 脚本入口
