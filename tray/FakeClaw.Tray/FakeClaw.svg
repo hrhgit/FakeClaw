@@ -1,0 +1,97 @@
+<svg id="robot-icon" class="robot-svg" width="240" height="240" viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg" aria-label="Robot Icon" role="img">
+            <title>可爱机器人</title>
+            <desc>一个带有发光蓝色眼睛和天线的现代感机器人图标</desc>
+            <defs>
+                <!-- 背景渐变 -->
+                <linearGradient id="bgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+                    <stop offset="0%" stop-color="#1e293b"></stop>
+                    <stop offset="100%" stop-color="#0f172a"></stop>
+                </linearGradient>
+                
+                <!-- 亮色金属渐变 -->
+                <linearGradient id="metalGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+                    <stop offset="0%" stop-color="#f8fafc"></stop>
+                    <stop offset="100%" stop-color="#cbd5e1"></stop>
+                </linearGradient>
+                
+                <!-- 暗色金属渐变 (用于阴影/关节) -->
+                <linearGradient id="metalDark" x1="0%" y1="0%" x2="0%" y2="100%">
+                    <stop offset="0%" stop-color="#94a3b8"></stop>
+                    <stop offset="100%" stop-color="#64748b"></stop>
+                </linearGradient>
+                
+                <!-- 屏幕渐变 -->
+                <linearGradient id="screenGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+                    <stop offset="0%" stop-color="#020617"></stop>
+                    <stop offset="100%" stop-color="#1e293b"></stop>
+                </linearGradient>
+
+                <!-- 霓虹发光滤镜 -->
+                <filter id="glow" x="-50%" y="-50%" width="200%" height="200%">
+                    <feGaussianBlur stdDeviation="3" result="blur"></feGaussianBlur>
+                    <feComposite in="SourceGraphic" in2="blur" operator="over"></feComposite>
+                </filter>
+            </defs>
+
+            <!-- 基础背景圆角矩形 -->
+            <rect width="200" height="200" rx="48" fill="url(#bgGrad)"></rect>
+
+            <!-- 机器人底部阴影 -->
+            <ellipse cx="100" cy="175" rx="45" ry="8" fill="#000000" opacity="0.3"></ellipse>
+
+            <!-- === 机器人主体部分 === -->
+
+            <!-- 左手臂 -->
+            <path d="M 50 135 Q 25 135 30 160" fill="none" stroke="url(#metalDark)" stroke-width="12" stroke-linecap="round"></path>
+            <circle cx="30" cy="160" r="7" fill="url(#metalGrad)"></circle>
+
+            <!-- 右手臂 -->
+            <path d="M 150 135 Q 175 135 170 160" fill="none" stroke="url(#metalDark)" stroke-width="12" stroke-linecap="round"></path>
+            <circle cx="170" cy="160" r="7" fill="url(#metalGrad)"></circle>
+
+            <!-- 身体/躯干 -->
+            <rect x="55" y="115" width="90" height="55" rx="18" fill="url(#metalGrad)"></rect>
+            
+            <!-- 身体内部细节(小屏幕/仪表盘) -->
+            <rect x="70" y="130" width="60" height="25" rx="8" fill="url(#screenGrad)"></rect>
+            <!-- 能量核心 (发光) -->
+            <circle cx="100" cy="142.5" r="5" fill="#38bdf8" filter="url(#glow)"></circle>
+            <line x1="78" y1="142.5" x2="88" y2="142.5" stroke="#475569" stroke-width="3" stroke-linecap="round"></line>
+            <line x1="112" y1="142.5" x2="122" y2="142.5" stroke="#475569" stroke-width="3" stroke-linecap="round"></line>
+
+            <!-- 脖子 -->
+            <rect x="85" y="98" width="30" height="20" fill="url(#metalDark)"></rect>
+            <!-- 脖子纹理 -->
+            <line x1="85" y1="105" x2="115" y2="105" stroke="#0f172a" stroke-width="1.5" opacity="0.5"></line>
+            <line x1="85" y1="110" x2="115" y2="110" stroke="#0f172a" stroke-width="1.5" opacity="0.5"></line>
+
+            <!-- 耳朵 / 侧边螺栓 -->
+            <rect x="38" y="62" width="16" height="24" rx="4" fill="url(#metalDark)"></rect>
+            <rect x="146" y="62" width="16" height="24" rx="4" fill="url(#metalDark)"></rect>
+
+            <!-- 头部主体 -->
+            <rect x="46" y="42" width="108" height="64" rx="16" fill="url(#metalGrad)"></rect>
+
+            <!-- 脸部屏幕 -->
+            <rect x="56" y="52" width="88" height="44" rx="10" fill="url(#screenGrad)"></rect>
+
+            <!-- 眼睛 (发光) -->
+            <circle cx="78" cy="68" r="8" fill="#38bdf8" filter="url(#glow)"></circle>
+            <circle cx="122" cy="68" r="8" fill="#38bdf8" filter="url(#glow)"></circle>
+            
+            <!-- 眼睛高光 -->
+            <circle cx="80" cy="66" r="3" fill="#ffffff"></circle>
+            <circle cx="124" cy="66" r="3" fill="#ffffff"></circle>
+
+            <!-- 微笑的嘴巴 (发光) -->
+            <path d="M 85 82 Q 100 92 115 82" fill="none" stroke="#38bdf8" stroke-width="3.5" stroke-linecap="round" filter="url(#glow)"></path>
+
+            <!-- 天线底座 -->
+            <path d="M 90 42 L 110 42 L 106 34 L 94 34 Z" fill="url(#metalDark)"></path>
+            
+            <!-- 天线杆 -->
+            <line x1="100" y1="34" x2="100" y2="18" stroke="url(#metalDark)" stroke-width="4" stroke-linecap="round"></line>
+            
+            <!-- 天线灯泡 (发光) -->
+            <circle cx="100" cy="18" r="6" fill="#38bdf8" filter="url(#glow)"></circle>
+        </svg>

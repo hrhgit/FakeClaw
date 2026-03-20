@@ -11,6 +11,8 @@ param(
 
 $ErrorActionPreference = "Stop"
 
+. (Join-Path $PSScriptRoot "fakeclaw-paths.ps1")
+
 Add-Type -AssemblyName UIAutomationClient
 Add-Type -AssemblyName UIAutomationTypes
 
@@ -42,9 +44,7 @@ public static class DesktopCalibrationNative {
 "@
 
 if ([string]::IsNullOrWhiteSpace($ConfigPath)) {
-  $ConfigPath = [System.IO.Path]::GetFullPath(
-    (Join-Path $PSScriptRoot "..\config\desktop-automation.config.json")
-  )
+  $ConfigPath = Resolve-FakeClawDesktopAutomationConfigPath
 }
 
 function Get-TargetConfig {

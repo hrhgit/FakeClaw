@@ -1,4 +1,3 @@
-import "dotenv/config";
 import { spawn } from "node:child_process";
 import http from "node:http";
 import {
@@ -9,9 +8,8 @@ import {
   unlinkSync,
   writeFileSync
 } from "node:fs";
-import path, { basename } from "node:path";
+import { basename } from "node:path";
 import { createInterface } from "node:readline";
-import { fileURLToPath } from "node:url";
 import {
   AUTOMATION_TARGET_APPS,
   DESKTOP_AUTOMATION_MODES,
@@ -32,9 +30,13 @@ import {
   PlatformClient,
   resolveBotPlatform
 } from "./platform-client.js";
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
+import {
+  DATA_ROOT,
+  ENV_FILE_PATH,
+  ensureRuntimeDataLayout,
+  resolveDataPath,
+  resolveRuntimePath
+} from "./app-runtime.js";
 
 const MENU_COMMAND_ZH = "\u83dc\u5355";
 const STATUS_COMMAND_ZH = "\u72b6\u6001";
@@ -216,9 +218,9 @@ const KEEP_DISPLAY_AWAKE_INTERVAL_SECONDS = Math.max(
 const botPlatform = resolveBotPlatform();
 const authorizedUserId = getAuthorizedUserId(botPlatform);
 const botName = getPlatformBotName(botPlatform);
-const listenerScriptPath = path.resolve(__dirname, "../scripts/windows-toast-listener.ps1");
-const keepDisplayAwakeScriptPath = path.resolve(__dirname, "../scripts/keep-display-awake.ps1");
-const instanceLockPath = path.resolve(__dirname, "../.fakeclaw.lock");
+const listenerScriptPath = resolveRuntimePath("scripts", "windows-toast-listener.ps1");
+const keepDisplayAwakeScriptPath = resolveRuntimePath("scripts", "keep-display-awake.ps1");
+const instanceLockPath = resolveDataPath(".fakeclaw.lock");
 
 const client = new PlatformClient({ platform: botPlatform });
 const recentNotifications = new Map();
@@ -891,6 +893,8 @@ function buildAdminStatusPayload() {
         }
       : null,
     authorizedUserId: authorizedUserId || "",
+    dataRoot: DATA_ROOT,
+    envFilePath: ENV_FILE_PATH,
     serviceStartedAt,
     lastError: getLastErrorSummary()
   };
@@ -1020,7 +1024,7 @@ function buildHelpMessage(helpCommand) {
 }
 
 function buildTaskSummary(task, result, finishedAt) {
-  return [
+  const lines = [
     `taskId: ${task.taskId}`,
     `status: ${result.success ? "success" : "failed"}`,
     `target: ${task.targetApp}`,
@@ -1028,7 +1032,28 @@ function buildTaskSummary(task, result, finishedAt) {
     `startedAt: ${formatTimestamp(task.startedAt)}`,
     `finishedAt: ${formatTimestamp(finishedAt)}`,
     `failureReason: ${result.success ? "-" : result.failureReason || "automation_failed"}`
-  ].join("\n");
+  ];
+  const automation = result?.automation;
+
+  if (automation && typeof automation === "object") {
+    if (typeof automation.launchedDuringRun === "boolean") {
+      lines.push(`launchedDuringRun: ${automation.launchedDuringRun ? "yes" : "no"}`);
+    }
+
+    if (typeof automation.targetResolution === "string" && automation.targetResolution) {
+      lines.push(`targetResolution: ${automation.targetResolution}`);
+    }
+
+    if (Number.isFinite(automation.targetLookupAttempts)) {
+      lines.push(`targetLookupAttempts: ${automation.targetLookupAttempts}`);
+    }
+
+    if (Number.isFinite(automation.targetLookupWaitMs)) {
+      lines.push(`targetLookupWaitMs: ${automation.targetLookupWaitMs}`);
+    }
+  }
+
+  return lines.join("\n");
 }
 
 function finalizeTask(task) {
@@ -1533,7 +1558,7 @@ function startKeepDisplayAwakeHelper() {
   ];
 
   keepDisplayAwakeProcess = spawn(POWERSHELL_PATH, args, {
-    cwd: path.resolve(__dirname, ".."),
+    cwd: resolveRuntimePath(),
     stdio: ["ignore", "pipe", "pipe"],
     windowsHide: true
   });
@@ -1613,7 +1638,7 @@ function startToastListener() {
   ];
 
   listenerProcess = spawn(POWERSHELL_PATH, args, {
-    cwd: path.resolve(__dirname, ".."),
+    cwd: resolveRuntimePath(),
     stdio: ["ignore", "pipe", "pipe"],
     windowsHide: true
   });
@@ -1761,6 +1786,8 @@ function shutdown(signal) {
   releaseSingleInstanceLock();
   process.exit(0);
 }
+
+await ensureRuntimeDataLayout();
 
 if (!ensureSingleInstance()) {
   process.exit(1);

@@ -6,4 +6,6 @@ node_modules/
 .fakeclaw.lock
 scripts/bin/
 tray/bin/
+tray/FakeClaw.Tray/FakeClaw.ico
+dist/
 *.log

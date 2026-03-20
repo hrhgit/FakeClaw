@@ -6,7 +6,17 @@ for %%I in ("%SCRIPT_DIR%..") do set "REPO_ROOT=%%~fI"
 
 cd /d "%REPO_ROOT%"
 
-if "%BOT_PLATFORM%"=="" set "BOT_PLATFORM=napcat"
+if "%BOT_PLATFORM%"=="" set "BOT_PLATFORM=none"
+
+if "%FAKECLAW_DATA_DIR%"=="" (
+  if not exist ".env" (
+    set "FAKECLAW_DATA_DIR=%LOCALAPPDATA%\FakeClaw"
+  )
+)
+
+if not "%FAKECLAW_DATA_DIR%"=="" (
+  if not exist "%FAKECLAW_DATA_DIR%" mkdir "%FAKECLAW_DATA_DIR%" >nul 2>nul
+)
 
 where node >nul 2>nul
 if errorlevel 1 (
@@ -15,21 +25,8 @@ if errorlevel 1 (
   exit /b 1
 )
 
-where npm >nul 2>nul
-if errorlevel 1 (
-  echo [error] npm not found in PATH.
-  pause
-  exit /b 1
-)
-
-if not exist ".env" (
-  echo [error] Missing .env file.
-  pause
-  exit /b 1
-)
-
 echo [start] Launching FakeClaw service for platform: %BOT_PLATFORM%
-call npm start
+call node src/index.js
 
 set "EXIT_CODE=%ERRORLEVEL%"
 if not "%EXIT_CODE%"=="0" (

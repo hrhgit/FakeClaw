@@ -2,15 +2,20 @@ import os from "node:os";
 import path from "node:path";
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import {
-  DESKTOP_AUTOMATION_CONFIG_PATH,
   DESKTOP_AUTOMATION_MODES,
   AUTOMATION_TARGET_APPS,
+  getDesktopAutomationConfigPath,
   listAutomationTargetConfigs,
   minimizeAutomationWindow,
   resolveTargetAppConfig,
   runAutomationAction,
   runCalibrationAnalysis
 } from "./automation.js";
+import {
+  USER_AUTOMATION_CONFIG_PATH,
+  ensureRuntimeDataLayout,
+  resolveDesktopAutomationConfigPath
+} from "./app-runtime.js";
 
 const CALIBRATION_TARGETS = new Set([
   AUTOMATION_TARGET_APPS.CODEX,
@@ -93,8 +98,10 @@ function normalizeClickFallback(clickFallback) {
 }
 
 export async function readDesktopAutomationConfig() {
+  const configPath = resolveDesktopAutomationConfigPath();
+
   try {
-    const raw = await readFile(DESKTOP_AUTOMATION_CONFIG_PATH, "utf8");
+    const raw = await readFile(configPath, "utf8");
     return JSON.parse(raw.replace(/^\uFEFF/, ""));
   } catch (error) {
     if (error?.code === "ENOENT") {
@@ -147,17 +154,18 @@ function applyTargetCalibrationConfig(config, targetApp, calibrationConfig) {
 
 export async function saveTargetCalibrationConfig(targetApp, calibrationConfig) {
   resolveTargetAppConfig(targetApp);
+  await ensureRuntimeDataLayout();
   const currentConfig = await readDesktopAutomationConfig();
   const nextConfig = applyTargetCalibrationConfig(currentConfig, targetApp, calibrationConfig);
 
   await writeFile(
-    DESKTOP_AUTOMATION_CONFIG_PATH,
+    USER_AUTOMATION_CONFIG_PATH,
     `${JSON.stringify(nextConfig, null, 2)}\n`,
     "utf8"
   );
 
   return {
-    configPath: DESKTOP_AUTOMATION_CONFIG_PATH,
+    configPath: USER_AUTOMATION_CONFIG_PATH,
     targetApp,
     calibrationConfig: getTargetCalibrationConfig(nextConfig, targetApp)
   };
@@ -224,7 +232,7 @@ export async function getCalibrationUiBootstrap() {
   const config = await readDesktopAutomationConfig();
 
   return {
-    configPath: DESKTOP_AUTOMATION_CONFIG_PATH,
+    configPath: getDesktopAutomationConfigPath(),
     targets: listAutomationTargetConfigs()
       .filter((target) => CALIBRATION_TARGETS.has(target.id))
       .map((target) => ({

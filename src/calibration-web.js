@@ -1,17 +1,16 @@
 import http from "node:http";
 import path from "node:path";
 import { readFile } from "node:fs/promises";
-import { fileURLToPath } from "node:url";
 import {
   analyzeTargetCalibration,
   getCalibrationUiBootstrap,
   saveTargetCalibrationConfig,
   testCalibrationConfig
 } from "./calibration.js";
+import "./app-runtime.js";
+import { resolveRuntimePath } from "./app-runtime.js";
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-const STATIC_ROOT = path.resolve(__dirname, "../public/calibration");
+const STATIC_ROOT = resolveRuntimePath("public", "calibration");
 const DEFAULT_HOST = process.env.CALIBRATION_WEB_HOST || "127.0.0.1";
 const DEFAULT_PORT = Number(process.env.CALIBRATION_WEB_PORT || 3210);
 

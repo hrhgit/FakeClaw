@@ -1,4 +1,5 @@
 import { EventEmitter } from "node:events";
+import "./app-runtime.js";
 import { FeishuClient } from "./feishu-client.js";
 import { createImageSegment, createTextSegment, NapCatClient } from "./napcat-client.js";
 import { TelegramClient } from "./telegram-client.js";
@@ -70,7 +71,7 @@ export function getAuthorizedUserId(platform = resolveBotPlatform()) {
 export function getPlatformBotName(platform = resolveBotPlatform()) {
   switch (platform) {
     case BOT_PLATFORMS.NONE:
-      return process.env.BOT_NAME || "UnconfiguredBot";
+      return process.env.BOT_NAME || "FakeClaw";
     case BOT_PLATFORMS.TELEGRAM:
       return process.env.TELEGRAM_BOT_NAME || process.env.BOT_NAME || "TelegramBot";
     case BOT_PLATFORMS.FEISHU:

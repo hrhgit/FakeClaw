@@ -1,29 +1,27 @@
 import { spawn } from "node:child_process";
 import { mkdir, readdir, rm, stat } from "node:fs/promises";
-import os from "node:os";
 import path from "node:path";
-import { fileURLToPath } from "node:url";
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
+import {
+  APP_ROOT,
+  SCREENSHOT_ROOT,
+  resolveDesktopAutomationConfigPath,
+  resolveRuntimePath
+} from "./app-runtime.js";
 
 const DEFAULT_AUTOMATION_TIMEOUT_MS = 30000;
 const DEFAULT_SCREENSHOT_RETENTION = 20;
 const DEFAULT_SCREENSHOT_AFTER_ACTION_DELAY_MS = 1200;
-const DEFAULT_SCREENSHOT_DIR = path.join(os.tmpdir(), "fakeclaw-screenshots");
+const DEFAULT_SCREENSHOT_DIR = SCREENSHOT_ROOT;
 const DEFAULT_CODEX_LAUNCH_COMMAND = "shell:AppsFolder\\OpenAI.Codex_2p2nqsd0c76g0!App";
 const POWERSHELL_PATH = process.env.POWERSHELL_PATH || "powershell.exe";
-const AUTOMATION_SCRIPT_PATH = path.resolve(__dirname, "../scripts/codex-automation.ps1");
-const CALIBRATION_SCRIPT_PATH = path.resolve(
-  __dirname,
-  "../scripts/calibrate-desktop-automation.ps1"
-);
-const SCREENSHOT_SCRIPT_PATH = path.resolve(__dirname, "../scripts/capture-desktop-screenshot.ps1");
-const MINIMIZE_WINDOW_SCRIPT_PATH = path.resolve(__dirname, "../scripts/minimize-codex-window.ps1");
-export const DESKTOP_AUTOMATION_CONFIG_PATH = path.resolve(
-  __dirname,
-  "../config/desktop-automation.config.json"
-);
+const AUTOMATION_SCRIPT_PATH = resolveRuntimePath("scripts", "codex-automation.ps1");
+const CALIBRATION_SCRIPT_PATH = resolveRuntimePath("scripts", "calibrate-desktop-automation.ps1");
+const SCREENSHOT_SCRIPT_PATH = resolveRuntimePath("scripts", "capture-desktop-screenshot.ps1");
+const MINIMIZE_WINDOW_SCRIPT_PATH = resolveRuntimePath("scripts", "minimize-codex-window.ps1");
+
+export function getDesktopAutomationConfigPath(explicitPath = "") {
+  return resolveDesktopAutomationConfigPath(explicitPath);
+}
 
 export const AUTOMATION_TARGET_APPS = {
   CODEX: "codex",
@@ -365,7 +363,7 @@ export async function runAutomationAction(targetApp, options = {}) {
       LaunchCommand: launchCommand,
       Mode: mode,
       TargetApp: config.id,
-      ConfigPath: options.configPath || ""
+      ConfigPath: getDesktopAutomationConfigPath(options.configPath)
     },
     {
       timeoutMs,
@@ -391,7 +389,7 @@ export async function runCalibrationAnalysis(targetApp, options = {}) {
       TargetApp: config.id,
       Mode: options.mode || "analyze",
       TopCount: options.topCount || 12,
-      ConfigPath: options.configPath || DESKTOP_AUTOMATION_CONFIG_PATH,
+      ConfigPath: getDesktopAutomationConfigPath(options.configPath),
       OpenIfMissing: options.openIfMissing ? true : undefined,
       LaunchCommand: options.openIfMissing ? launchCommand : options.launchCommand || ""
     },

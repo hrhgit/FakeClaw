@@ -23,6 +23,7 @@ namespace FakeClaw.Tray
         private readonly HttpClient _httpClient;
         private readonly JavaScriptSerializer _serializer;
         private readonly string _repoRoot;
+        private readonly string _dataRoot;
         private readonly string _envPath;
         private string _serviceUrlBase;
 
@@ -36,7 +37,9 @@ namespace FakeClaw.Tray
         {
             _appIcon = TrayIconFactory.CreateTrayIcon();
             _repoRoot = ResolveRepoRoot();
-            _envPath = Path.Combine(_repoRoot, ".env");
+            _dataRoot = ResolveDataRoot(_repoRoot);
+            EnsureDataRoot();
+            _envPath = Path.Combine(_dataRoot, ".env");
             _currentPlatform = ResolveConfiguredPlatform(EnvFile.Load(_envPath));
             _httpClient = new HttpClient { Timeout = TimeSpan.FromSeconds(2) };
             _serializer = new JavaScriptSerializer();
@@ -119,6 +122,8 @@ namespace FakeClaw.Tray
                     RedirectStandardOutput = true,
                     RedirectStandardError = true
                 };
+                startInfo.EnvironmentVariables["FAKECLAW_DATA_DIR"] = _dataRoot;
+                startInfo.EnvironmentVariables["FAKECLAW_APP_ROOT"] = _repoRoot;
 
                 _serviceProcess = new Process
                 {
@@ -275,7 +280,7 @@ namespace FakeClaw.Tray
 
         private async Task OpenConfigAsync()
         {
-            var previousPlatform = NormalizePlatform(EnvFile.Load(_envPath).Get("BOT_PLATFORM", "napcat"));
+            var previousPlatform = NormalizePlatform(EnvFile.Load(_envPath).Get("BOT_PLATFORM", "none"));
 
             using (var form = new ConfigForm(_envPath))
             {
@@ -483,9 +488,43 @@ namespace FakeClaw.Tray
             return Environment.CurrentDirectory;
         }
 
+        private static string ResolveDataRoot(string appRoot)
+        {
+            var explicitDataRoot = Environment.GetEnvironmentVariable("FAKECLAW_DATA_DIR");
+            if (!string.IsNullOrWhiteSpace(explicitDataRoot))
+            {
+                return Path.GetFullPath(explicitDataRoot);
+            }
+
+            if (File.Exists(Path.Combine(appRoot, ".env")))
+            {
+                return appRoot;
+            }
+
+            var localAppData = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
+            if (string.IsNullOrWhiteSpace(localAppData))
+            {
+                localAppData = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "AppData", "Local");
+            }
+
+            return Path.Combine(localAppData, "FakeClaw");
+        }
+
+        private void EnsureDataRoot()
+        {
+            Directory.CreateDirectory(_dataRoot);
+            Directory.CreateDirectory(Path.Combine(_dataRoot, "config"));
+            Directory.CreateDirectory(Path.Combine(_dataRoot, "screenshots"));
+        }
+
         private static string NormalizePlatform(string platform)
         {
             var normalized = (platform ?? "none").Trim().ToLowerInvariant();
+            if (string.IsNullOrWhiteSpace(normalized))
+            {
+                return "none";
+            }
+
             return normalized == "telegram" || normalized == "feishu" || normalized == "wecom" || normalized == "none"
                 ? normalized
                 : "napcat";

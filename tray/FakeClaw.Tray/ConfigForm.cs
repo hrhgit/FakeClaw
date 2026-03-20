@@ -56,7 +56,7 @@ namespace FakeClaw.Tray
             var commonBody = (FlowLayoutPanel)commonGroup.Controls[0];
 
             CreatePlatformHint(commonBody);
-            CreateTextRow(commonBody, "通用机器人名", "BOT_NAME", _envFile.Get("BOT_NAME", "NapCatBot"));
+            CreateTextRow(commonBody, "应用显示名", "BOT_NAME", _envFile.Get("BOT_NAME", "FakeClaw"));
             CreateTextRow(
                 commonBody,
                 "通知来源白名单",
@@ -70,7 +70,7 @@ namespace FakeClaw.Tray
             CreateTextRow(commonBody, "截图目录", "SCREENSHOT_DIR", _envFile.Get("SCREENSHOT_DIR", string.Empty), BrowseMode.Folder);
             CreateActionRow(commonBody, "校准网页", "打开校准网页", OpenCalibrationPage);
 
-            var platformGroup = CreateGroup("平台配置");
+            var platformGroup = CreateGroup("可选接入平台");
             scrollPanel.Controls.Add(platformGroup);
             var platformBody = (FlowLayoutPanel)platformGroup.Controls[0];
             _platformComboBox = CreatePlatformSelector(platformBody);
@@ -110,7 +110,7 @@ namespace FakeClaw.Tray
             saveButton.Click += (sender, args) => SaveAndClose(false);
             buttonPanel.Controls.Add(saveButton);
 
-            SelectPlatform(NormalizePlatform(_envFile.Get("BOT_PLATFORM", "napcat")));
+            SelectPlatform(NormalizePlatform(_envFile.Get("BOT_PLATFORM", "none")));
         }
 
         public bool ApplyToRunningService { get; private set; }
@@ -125,7 +125,7 @@ namespace FakeClaw.Tray
                     return GetPlatformKeyByLabel(selectedLabel);
                 }
 
-                return NormalizePlatform(Convert.ToString(_platformTabs.SelectedTab != null ? _platformTabs.SelectedTab.Tag : "napcat"));
+                return NormalizePlatform(Convert.ToString(_platformTabs.SelectedTab != null ? _platformTabs.SelectedTab.Tag : "none"));
             }
         }
 
@@ -163,7 +163,7 @@ namespace FakeClaw.Tray
             {
                 Width = 420,
                 Height = 26,
-                Text = "用下拉框明确选择启动平台，下面的标签页只负责填写该平台配置。",
+                Text = "默认可保持“未配置 / 无机器人”。若需要消息平台，再切换到对应标签页填写配置；NapCat 需自行安装。",
                 TextAlign = ContentAlignment.MiddleLeft
             };
             row.Controls.Add(hint);
@@ -183,6 +183,7 @@ namespace FakeClaw.Tray
             };
             comboBox.Items.AddRange(new object[]
             {
+                "未配置 / 无机器人",
                 "QQ / NapCat",
                 "Telegram",
                 "飞书",
@@ -374,6 +375,11 @@ namespace FakeClaw.Tray
         private void SelectPlatformTab(string platform)
         {
             var normalized = NormalizePlatform(platform);
+            if (normalized == "none")
+            {
+                return;
+            }
+
             foreach (TabPage tabPage in _platformTabs.TabPages)
             {
                 if (string.Equals(NormalizePlatform(Convert.ToString(tabPage.Tag)), normalized, StringComparison.OrdinalIgnoreCase))
@@ -544,8 +550,13 @@ namespace FakeClaw.Tray
 
         private static string NormalizePlatform(string platform)
         {
-            var normalized = (platform ?? "napcat").Trim().ToLowerInvariant();
-            return normalized == "telegram" || normalized == "feishu" || normalized == "wecom"
+            var normalized = (platform ?? "none").Trim().ToLowerInvariant();
+            if (string.IsNullOrWhiteSpace(normalized))
+            {
+                return "none";
+            }
+
+            return normalized == "none" || normalized == "telegram" || normalized == "feishu" || normalized == "wecom"
                 ? normalized
                 : "napcat";
         }
@@ -554,6 +565,8 @@ namespace FakeClaw.Tray
         {
             switch (NormalizePlatform(platform))
             {
+                case "none":
+                    return "未配置 / 无机器人";
                 case "telegram":
                     return "Telegram";
                 case "feishu":
@@ -569,6 +582,8 @@ namespace FakeClaw.Tray
         {
             switch ((label ?? string.Empty).Trim())
             {
+                case "未配置 / 无机器人":
+                    return "none";
                 case "Telegram":
                     return "telegram";
                 case "飞书":
@@ -584,6 +599,8 @@ namespace FakeClaw.Tray
         {
             switch (NormalizePlatform(platform))
             {
+                case "none":
+                    return new string[0];
                 case "telegram":
                     return new[] { "TELEGRAM_BOT_TOKEN", "TELEGRAM_CHAT_ID" };
                 case "feishu":

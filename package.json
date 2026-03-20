@@ -1,11 +1,14 @@
 {
   "name": "fakeclaw",
+  "version": "0.1.0",
   "private": true,
   "type": "module",
   "scripts": {
-    "start:all": "start-bot.bat",
+    "start:all": "startup\\start-app.bat",
     "start": "node src/index.js",
-    "dev": "node --watch src/index.js"
+    "dev": "node --watch src/index.js",
+    "build:tray": "powershell -NoProfile -ExecutionPolicy Bypass -File ./scripts/build-tray-app.ps1",
+    "build:release": "powershell -NoProfile -ExecutionPolicy Bypass -File ./scripts/build-release.ps1"
   },
   "dependencies": {
     "@larksuiteoapi/node-sdk": "^1.59.0",

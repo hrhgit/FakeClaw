@@ -10,6 +10,8 @@ param(
 
 $ErrorActionPreference = "Stop"
 
+. (Join-Path $PSScriptRoot "fakeclaw-paths.ps1")
+
 Add-Type -AssemblyName System.Windows.Forms
 Add-Type -AssemblyName UIAutomationClient
 Add-Type -AssemblyName UIAutomationTypes
@@ -50,9 +52,7 @@ public static class DesktopAutomationNative {
 $MOUSEEVENTF_LEFTDOWN = 0x0002
 $MOUSEEVENTF_LEFTUP = 0x0004
 $AUTOMATION_CONFIG_PATH = if ([string]::IsNullOrWhiteSpace($ConfigPath)) {
-  [System.IO.Path]::GetFullPath(
-    (Join-Path $PSScriptRoot "..\config\desktop-automation.config.json")
-  )
+  Resolve-FakeClawDesktopAutomationConfigPath
 } else {
   [System.IO.Path]::GetFullPath($ConfigPath)
 }
@@ -245,6 +245,32 @@ function Get-TargetAutomationNumberSetting {
 
   return Get-ConfigNumber -Node $sharedAutomationConfig -Path $Path -Default $Default
 }
+
+function Get-PositiveIntSetting {
+  param(
+    [string]$Value,
+    [int]$Default
+  )
+
+  if ([string]::IsNullOrWhiteSpace($Value)) {
+    return $Default
+  }
+
+  try {
+    $parsed = [int]$Value
+    if ($parsed -gt 0) {
+      return $parsed
+    }
+  } catch {
+  }
+
+  return $Default
+}
+
+$POST_LAUNCH_SETTLE_MS = Get-PositiveIntSetting -Value $env:AUTOMATION_POST_LAUNCH_SETTLE_MS -Default 1200
+$FOCUS_DISCOVERY_TIMEOUT_MS = Get-PositiveIntSetting -Value $env:AUTOMATION_FOCUS_DISCOVERY_TIMEOUT_MS -Default 4500
+$FOCUS_DISCOVERY_INTERVAL_MS = Get-PositiveIntSetting -Value $env:AUTOMATION_FOCUS_DISCOVERY_INTERVAL_MS -Default 250
+$FOCUS_REACTIVATE_EVERY = Get-PositiveIntSetting -Value $env:AUTOMATION_FOCUS_REACTIVATE_EVERY -Default 4
 
 function Resolve-MinThreshold {
   param(
@@ -1298,11 +1324,147 @@ function Find-GenericInput {
   }
 }
 
+function Resolve-InputTarget {
+  param(
+    [System.Diagnostics.Process]$Process,
+    [bool]$AllowCoordinateFallback = $true
+  )
+
+  $preferredTarget = Find-PreferredComposer -Process $Process
+  if ($null -ne $preferredTarget) {
+    return @{
+      Target = $preferredTarget
+      Resolution = "preferred"
+      FailureReason = ""
+    }
+  }
+
+  $selection = Find-GenericInput -Process $Process
+  if ($null -ne $selection) {
+    if ($selection.Ambiguous) {
+      return @{
+        Target = $null
+        Resolution = ""
+        FailureReason = "focus_input_ambiguous"
+      }
+    }
+
+    return @{
+      Target = $selection.Top
+      Resolution = "generic"
+      FailureReason = ""
+    }
+  }
+
+  if ($AllowCoordinateFallback) {
+    $fallbackTarget = Get-CoordinateFallbackTarget -Process $Process
+    if ($null -ne $fallbackTarget) {
+      return @{
+        Target = $fallbackTarget
+        Resolution = "coordinateFallback"
+        FailureReason = ""
+      }
+    }
+  }
+
+  return @{
+    Target = $null
+    Resolution = ""
+    FailureReason = "focus_input_failed"
+  }
+}
+
+function Wait-ForResolvedInputTarget {
+  param(
+    [System.Diagnostics.Process]$Process,
+    [int]$TimeoutMs = 4500,
+    [int]$IntervalMs = 250,
+    [int]$ReactivateEvery = 4
+  )
+
+  $startedAt = Get-Date
+  $deadline = $startedAt.AddMilliseconds($TimeoutMs)
+  $attempts = 0
+  $lastFailureReason = "focus_input_failed"
+  $activeProcess = $Process
+  $processChanged = $false
+  $reactivateEveryAttempts = [Math]::Max($ReactivateEvery, 1)
+
+  while ((Get-Date) -lt $deadline) {
+    $attempts += 1
+
+    $latestProcess = Get-TargetProcess
+    if ($null -ne $latestProcess) {
+      if (
+        $null -eq $activeProcess -or
+        $activeProcess.Id -ne $latestProcess.Id -or
+        [int64]$activeProcess.MainWindowHandle -ne [int64]$latestProcess.MainWindowHandle
+      ) {
+        $processChanged = $true
+      }
+
+      $activeProcess = $latestProcess
+    }
+
+    if ($null -ne $activeProcess) {
+      $resolved = Resolve-InputTarget -Process $activeProcess -AllowCoordinateFallback:$false
+      if ($null -ne $resolved.Target) {
+        return @{
+          Target = $resolved.Target
+          Resolution = $resolved.Resolution
+          FailureReason = ""
+          Attempts = $attempts
+          WaitedMs = [int][Math]::Round(((Get-Date) - $startedAt).TotalMilliseconds)
+          Process = $activeProcess
+          ProcessChanged = $processChanged
+        }
+      }
+
+      $lastFailureReason = $resolved.FailureReason
+
+      if (($attempts % $reactivateEveryAttempts) -eq 0) {
+        [void](Activate-Window -Process $activeProcess)
+      }
+    }
+
+    Start-Sleep -Milliseconds $IntervalMs
+  }
+
+  if ($null -ne $activeProcess) {
+    $resolved = Resolve-InputTarget -Process $activeProcess -AllowCoordinateFallback:$true
+    if ($null -ne $resolved.Target) {
+      return @{
+        Target = $resolved.Target
+        Resolution = $resolved.Resolution
+        FailureReason = ""
+        Attempts = $attempts
+        WaitedMs = [int][Math]::Round(((Get-Date) - $startedAt).TotalMilliseconds)
+        Process = $activeProcess
+        ProcessChanged = $processChanged
+      }
+    }
+
+    $lastFailureReason = $resolved.FailureReason
+  }
+
+  return @{
+    Target = $null
+    Resolution = ""
+    FailureReason = $lastFailureReason
+    Attempts = $attempts
+    WaitedMs = [int][Math]::Round(((Get-Date) - $startedAt).TotalMilliseconds)
+    Process = $activeProcess
+    ProcessChanged = $processChanged
+  }
+}
+
 try {
   $process = Get-TargetProcess
+  $launchedDuringRun = $false
 
   if ($null -eq $process) {
     Start-TargetApplication -Command $LaunchCommand
+    $launchedDuringRun = $true
     $process = Wait-ForTargetProcess -TimeoutMs 15000
   }
 
@@ -1317,38 +1479,53 @@ try {
   }
 
   if ($Mode -eq "open") {
+    if ($launchedDuringRun -and $POST_LAUNCH_SETTLE_MS -gt 0) {
+      Start-Sleep -Milliseconds $POST_LAUNCH_SETTLE_MS
+      $latestProcess = Get-TargetProcess
+      if ($null -ne $latestProcess) {
+        $process = $latestProcess
+      }
+    }
+
     Write-Output (
       Write-JsonResult -Status "success" -Data @{
         processId = $process.Id
         windowTitle = $process.MainWindowTitle
+        launchedDuringRun = $launchedDuringRun
       }
     )
     exit 0
   }
 
-  $target = Find-PreferredComposer -Process $process
-
-  if ($null -eq $target) {
-    $selection = Find-GenericInput -Process $process
-    if ($null -ne $selection) {
-      if ($selection.Ambiguous) {
-        Write-Output (Write-JsonResult -Status "failed" -FailureReason "focus_input_ambiguous")
-        exit 0
-      }
-
-      $target = $selection.Top
-    }
-
-    if ($null -eq $target) {
-      $target = Get-CoordinateFallbackTarget -Process $process
-    }
+  if ($launchedDuringRun -and $POST_LAUNCH_SETTLE_MS -gt 0) {
+    Start-Sleep -Milliseconds $POST_LAUNCH_SETTLE_MS
   }
 
-  if ($null -eq $target) {
-    Write-Output (Write-JsonResult -Status "failed" -FailureReason "focus_input_failed")
+  $targetResult = Wait-ForResolvedInputTarget `
+    -Process $process `
+    -TimeoutMs $FOCUS_DISCOVERY_TIMEOUT_MS `
+    -IntervalMs $FOCUS_DISCOVERY_INTERVAL_MS `
+    -ReactivateEvery $FOCUS_REACTIVATE_EVERY
+
+  if ($null -ne $targetResult.Process) {
+    $process = $targetResult.Process
+  }
+
+  if ($null -eq $targetResult.Target) {
+    Write-Output (
+      Write-JsonResult -Status "failed" -FailureReason $targetResult.FailureReason -Data @{
+        processId = $process.Id
+        windowTitle = $process.MainWindowTitle
+        launchedDuringRun = $launchedDuringRun
+        targetLookupAttempts = $targetResult.Attempts
+        targetLookupWaitMs = $targetResult.WaitedMs
+        processChangedDuringLookup = $targetResult.ProcessChanged
+      }
+    )
     exit 0
   }
 
+  $target = $targetResult.Target
   Prime-InputElement -Target $target
 
   if ($Mode -eq "focus") {
@@ -1356,6 +1533,11 @@ try {
       Write-JsonResult -Status "success" -Data @{
         processId = $process.Id
         windowTitle = $process.MainWindowTitle
+        launchedDuringRun = $launchedDuringRun
+        targetResolution = $targetResult.Resolution
+        targetLookupAttempts = $targetResult.Attempts
+        targetLookupWaitMs = $targetResult.WaitedMs
+        processChangedDuringLookup = $targetResult.ProcessChanged
         selectedControlType = $target.TypeName
         selectedControlName = $target.Name
         selectedClassName = $target.ClassName
@@ -1384,6 +1566,11 @@ try {
       Write-JsonResult -Status "success" -Data @{
         processId = $process.Id
         windowTitle = $process.MainWindowTitle
+        launchedDuringRun = $launchedDuringRun
+        targetResolution = $targetResult.Resolution
+        targetLookupAttempts = $targetResult.Attempts
+        targetLookupWaitMs = $targetResult.WaitedMs
+        processChangedDuringLookup = $targetResult.ProcessChanged
         selectedControlType = $target.TypeName
         selectedControlName = $target.Name
         selectedClassName = $target.ClassName
@@ -1399,6 +1586,11 @@ try {
     Write-JsonResult -Status "success" -Data @{
       processId = $process.Id
       windowTitle = $process.MainWindowTitle
+      launchedDuringRun = $launchedDuringRun
+      targetResolution = $targetResult.Resolution
+      targetLookupAttempts = $targetResult.Attempts
+      targetLookupWaitMs = $targetResult.WaitedMs
+      processChangedDuringLookup = $targetResult.ProcessChanged
       selectedControlType = $target.TypeName
       selectedControlName = $target.Name
       selectedClassName = $target.ClassName
