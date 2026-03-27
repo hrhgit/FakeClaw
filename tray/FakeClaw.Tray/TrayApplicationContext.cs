@@ -25,6 +25,7 @@ namespace FakeClaw.Tray
         private readonly string _repoRoot;
         private readonly string _dataRoot;
         private readonly string _envPath;
+        private readonly string _lockPath;
         private string _serviceUrlBase;
 
         private Process _serviceProcess;
@@ -40,6 +41,7 @@ namespace FakeClaw.Tray
             _dataRoot = ResolveDataRoot(_repoRoot);
             EnsureDataRoot();
             _envPath = Path.Combine(_dataRoot, ".env");
+            _lockPath = Path.Combine(_dataRoot, ".fakeclaw.lock");
             _currentPlatform = ResolveConfiguredPlatform(EnvFile.Load(_envPath));
             _httpClient = new HttpClient { Timeout = TimeSpan.FromSeconds(2) };
             _serializer = new JavaScriptSerializer();
@@ -92,6 +94,13 @@ namespace FakeClaw.Tray
         {
             if (_serviceProcess != null && !_serviceProcess.HasExited)
             {
+                await RefreshStatusAsync();
+                return;
+            }
+
+            if (await TryGetStatusAsync() != null)
+            {
+                _serviceProcess = null;
                 await RefreshStatusAsync();
                 return;
             }
@@ -246,11 +255,12 @@ namespace FakeClaw.Tray
             _notifyIcon.Text = TrimNotifyText(running ? "FakeClaw 服务未就绪" : "FakeClaw 服务已停止");
         }
 
-        private async Task<AdminStatusResponse> TryGetStatusAsync()
+        private async Task<AdminStatusResponse> TryGetStatusAsync(string serviceUrlBase = null)
         {
             try
             {
-                var response = await _httpClient.GetAsync(_serviceUrlBase + "/admin/status");
+                var baseUrl = string.IsNullOrWhiteSpace(serviceUrlBase) ? _serviceUrlBase : serviceUrlBase;
+                var response = await _httpClient.GetAsync(baseUrl + "/admin/status");
                 if (!response.IsSuccessStatusCode)
                 {
                     return null;
@@ -325,43 +335,48 @@ namespace FakeClaw.Tray
 
         private async Task StopServiceAsync(string serviceUrlBase = null)
         {
-            if (_serviceProcess == null)
+            var trackedProcess = _serviceProcess;
+            var baseUrl = string.IsNullOrWhiteSpace(serviceUrlBase) ? _serviceUrlBase : serviceUrlBase;
+            if (trackedProcess != null && trackedProcess.HasExited)
             {
-                return;
+                trackedProcess.Dispose();
+                trackedProcess = null;
+                _serviceProcess = null;
             }
 
-            if (_serviceProcess.HasExited)
+            var serviceRunning = await TryGetStatusAsync(baseUrl) != null;
+            if (trackedProcess == null && !serviceRunning)
             {
-                _serviceProcess.Dispose();
-                _serviceProcess = null;
                 return;
             }
 
             try
             {
-                await PostAsync("/admin/shutdown", serviceUrlBase);
+                await PostAsync("/admin/shutdown", baseUrl);
             }
             catch
             {
             }
 
-            for (var attempt = 0; attempt < 12; attempt += 1)
+            if (await WaitForServiceStopAsync(baseUrl, trackedProcess))
             {
-                if (_serviceProcess.HasExited)
-                {
-                    break;
-                }
-
-                await Task.Delay(250);
+                DisposeTrackedServiceProcess();
+                return;
             }
 
-            if (!_serviceProcess.HasExited)
+            var lockedProcessId = ReadLockedProcessId();
+            if (lockedProcessId > 0 && (trackedProcess == null || trackedProcess.Id != lockedProcessId))
             {
-                KillProcessTree(_serviceProcess.Id);
+                KillProcessTree(lockedProcessId);
             }
 
-            _serviceProcess.Dispose();
-            _serviceProcess = null;
+            if (trackedProcess != null && !trackedProcess.HasExited)
+            {
+                KillProcessTree(trackedProcess.Id);
+            }
+
+            await WaitForServiceStopAsync(baseUrl, trackedProcess);
+            DisposeTrackedServiceProcess();
         }
 
         private async Task ExitApplicationAsync()
@@ -382,6 +397,52 @@ namespace FakeClaw.Tray
             var response = await _httpClient.PostAsync(baseUrl + path, new StringContent(string.Empty));
             response.EnsureSuccessStatusCode();
             return await response.Content.ReadAsStringAsync();
+        }
+
+        private async Task<bool> WaitForServiceStopAsync(string serviceUrlBase, Process trackedProcess)
+        {
+            for (var attempt = 0; attempt < 20; attempt += 1)
+            {
+                var status = await TryGetStatusAsync(serviceUrlBase);
+                var trackedExited = trackedProcess == null || trackedProcess.HasExited;
+                if (status == null && trackedExited)
+                {
+                    return true;
+                }
+
+                await Task.Delay(250);
+            }
+
+            return false;
+        }
+
+        private int ReadLockedProcessId()
+        {
+            try
+            {
+                if (!File.Exists(_lockPath))
+                {
+                    return 0;
+                }
+
+                int processId;
+                return int.TryParse(File.ReadAllText(_lockPath).Trim(), out processId) ? processId : 0;
+            }
+            catch
+            {
+                return 0;
+            }
+        }
+
+        private void DisposeTrackedServiceProcess()
+        {
+            if (_serviceProcess == null)
+            {
+                return;
+            }
+
+            _serviceProcess.Dispose();
+            _serviceProcess = null;
         }
 
         private void TryLaunchNapCat(EnvFile env)

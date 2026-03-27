@@ -14,7 +14,7 @@ export const BOT_PLATFORMS = Object.freeze({
 });
 
 const PLATFORM_REQUIRED_ENV_KEYS = Object.freeze({
-  [BOT_PLATFORMS.NAPCAT]: ["NAPCAT_TOKEN", "NAPCAT_START_SCRIPT", "QQ_USER_ID"],
+  [BOT_PLATFORMS.NAPCAT]: ["NAPCAT_START_SCRIPT", "QQ_USER_ID"],
   [BOT_PLATFORMS.TELEGRAM]: ["TELEGRAM_BOT_TOKEN", "TELEGRAM_CHAT_ID"],
   [BOT_PLATFORMS.FEISHU]: ["FEISHU_APP_ID", "FEISHU_APP_SECRET", "FEISHU_OPEN_ID"],
   [BOT_PLATFORMS.WECOM]: [
@@ -167,11 +167,14 @@ function createUnderlyingClient(platform) {
         apiBaseUrl: process.env.WECOM_API_BASE_URL || "https://qyapi.weixin.qq.com"
       });
     case BOT_PLATFORMS.NAPCAT:
-    default:
-      return new NapCatClient({
+    default: {
+      const napCatClient = new NapCatClient({
         wsUrl: process.env.NAPCAT_WS_URL || "ws://127.0.0.1:3001",
         token: process.env.NAPCAT_TOKEN || ""
       });
+      napCatClient.setStartScriptPath(process.env.NAPCAT_START_SCRIPT || "");
+      return napCatClient;
+    }
   }
 }
 

@@ -1,5 +1,6 @@
 import { EventEmitter } from "node:events";
 import WebSocket from "ws";
+import { resolveNapCatOneBotToken } from "./napcat-config.js";
 
 function createEchoFactory() {
   let echoId = 0;
@@ -33,6 +34,7 @@ export class NapCatClient extends EventEmitter {
     super();
     this.wsUrl = wsUrl || "ws://127.0.0.1:3001";
     this.token = token || "";
+    this.startScriptPath = "";
     this.actionTimeoutMs = Number(actionTimeoutMs) || 15000;
     this.reconnectDelayMs = Number(reconnectDelayMs) || 3000;
     this.nextEcho = createEchoFactory();
@@ -40,24 +42,54 @@ export class NapCatClient extends EventEmitter {
     this.socket = undefined;
     this.reconnectTimer = undefined;
     this.closedByApp = false;
+    this.activeToken = this.token;
+    this.activeNapcatUrl = this.buildNapcatUrl(this.activeToken);
   }
 
-  get napcatUrl() {
-    if (!this.token) {
+  setStartScriptPath(startScriptPath) {
+    this.startScriptPath = String(startScriptPath || "").trim();
+  }
+
+  buildNapcatUrl(token) {
+    if (!token) {
       return this.wsUrl;
     }
 
     return `${this.wsUrl}${this.wsUrl.includes("?") ? "&" : "?"}access_token=${encodeURIComponent(
-      this.token
+      token
     )}`;
   }
 
-  connect() {
+  get napcatUrl() {
+    return this.activeNapcatUrl || this.buildNapcatUrl(this.activeToken);
+  }
+
+  async connect() {
     clearTimeout(this.reconnectTimer);
     this.closedByApp = false;
 
+    try {
+      const tokenResolution = await resolveNapCatOneBotToken({
+        startScriptPath: this.startScriptPath,
+        wsUrl: this.wsUrl,
+        explicitToken: this.token
+      });
+      this.activeToken = tokenResolution.token || "";
+      this.activeNapcatUrl = this.buildNapcatUrl(this.activeToken);
+
+      if (tokenResolution.source === "onebot_config" && !tokenResolution.explicitTokenMatches) {
+        console.warn(
+          `[bot] napcat token mismatch; using token from ${tokenResolution.configPath} instead of NAPCAT_TOKEN`
+        );
+      }
+    } catch (error) {
+      this.activeToken = this.token || "";
+      this.activeNapcatUrl = this.buildNapcatUrl(this.activeToken);
+      console.warn(`[bot] failed to auto-resolve napcat token: ${error.message}`);
+    }
+
     this.socket = new WebSocket(this.napcatUrl, {
-      headers: this.token ? { Authorization: `Bearer ${this.token}` } : undefined
+      headers: this.activeToken ? { Authorization: `Bearer ${this.activeToken}` } : undefined
     });
 
     this.socket.on("open", () => {
@@ -74,7 +106,7 @@ export class NapCatClient extends EventEmitter {
 
       if (!this.closedByApp) {
         this.reconnectTimer = setTimeout(() => {
-          this.connect();
+          void this.connect();
         }, this.reconnectDelayMs);
       }
     });
@@ -89,7 +121,10 @@ export class NapCatClient extends EventEmitter {
     clearTimeout(this.reconnectTimer);
     this.rejectPendingActions(new Error("NapCat client closed"));
 
-    if (this.socket && this.socket.readyState === WebSocket.OPEN) {
+    if (
+      this.socket &&
+      (this.socket.readyState === WebSocket.OPEN || this.socket.readyState === WebSocket.CONNECTING)
+    ) {
       this.socket.close();
     }
   }

@@ -211,7 +211,7 @@ namespace FakeClaw.Tray
             tabs.TabPages.Add(CreatePlatformTab("QQ / NapCat", "napcat", new[]
             {
                 FieldDefinition.Text("NAPCAT_WS_URL", "NapCat WS 地址"),
-                FieldDefinition.Masked("NAPCAT_TOKEN", "NapCat Token"),
+                FieldDefinition.Masked("NAPCAT_TOKEN", "NapCat Token（可留空自动获取）"),
                 FieldDefinition.File("NAPCAT_START_SCRIPT", "NapCat 启动脚本"),
                 FieldDefinition.Text("QQ_USER_ID", "QQ 用户 ID")
             }));
@@ -608,7 +608,7 @@ namespace FakeClaw.Tray
                 case "wecom":
                     return new[] { "WECOM_CORP_ID", "WECOM_CORP_SECRET", "WECOM_AGENT_ID", "WECOM_USER_ID", "WECOM_TOKEN", "WECOM_ENCODING_AES_KEY" };
                 default:
-                    return new[] { "NAPCAT_WS_URL", "NAPCAT_TOKEN", "NAPCAT_START_SCRIPT", "QQ_USER_ID" };
+                    return new[] { "NAPCAT_WS_URL", "NAPCAT_START_SCRIPT", "QQ_USER_ID" };
             }
         }
 
