@@ -46,8 +46,8 @@ Name: "desktopicon"; Description: "创建桌面快捷方式"; Flags: unchecked
 Source: "{#StageDir}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
 
 [Icons]
-Name: "{autoprograms}\{#MyAppName}\FakeClaw"; Filename: "{app}\{#MyAppExe}"
-Name: "{commondesktop}\FakeClaw"; Filename: "{app}\{#MyAppExe}"; Tasks: desktopicon
+Name: "{autoprograms}\{#MyAppName}\FakeClaw"; Filename: "{app}\{#MyAppExe}"; IconFilename: "{app}\{#MyAppExe}"; IconIndex: 0
+Name: "{commondesktop}\FakeClaw"; Filename: "{app}\{#MyAppExe}"; IconFilename: "{app}\{#MyAppExe}"; IconIndex: 0; Tasks: desktopicon
 
 [Run]
 Filename: "{app}\{#MyAppExe}"; Description: "启动 FakeClaw"; Flags: nowait postinstall skipifsilent
