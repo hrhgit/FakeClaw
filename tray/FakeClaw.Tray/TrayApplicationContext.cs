@@ -121,18 +121,13 @@ namespace FakeClaw.Tray
 
             try
             {
-                var startInfo = new ProcessStartInfo
+                string resolveError;
+                var startInfo = BuildPortmuxProcessStartInfo("start", out resolveError);
+                if (startInfo == null)
                 {
-                    FileName = "node",
-                    Arguments = "src/index.js",
-                    WorkingDirectory = _repoRoot,
-                    UseShellExecute = false,
-                    CreateNoWindow = true,
-                    RedirectStandardOutput = true,
-                    RedirectStandardError = true
-                };
-                startInfo.EnvironmentVariables["FAKECLAW_DATA_DIR"] = _dataRoot;
-                startInfo.EnvironmentVariables["FAKECLAW_APP_ROOT"] = _repoRoot;
+                    Fail(resolveError);
+                    return;
+                }
 
                 _serviceProcess = new Process
                 {
@@ -151,6 +146,7 @@ namespace FakeClaw.Tray
 
                 _serviceProcess.BeginOutputReadLine();
                 _serviceProcess.BeginErrorReadLine();
+                _serviceUrlBase = BuildServiceUrlBase();
 
                 UpdateMenuState(BuildStatusText("服务启动中", _currentPlatform), false, true);
                 await WaitForServiceReadyAsync();
@@ -502,19 +498,194 @@ namespace FakeClaw.Tray
         {
             var env = EnvFile.Load(_envPath);
             var host = env.Get("ADMIN_CONTROL_HOST", "127.0.0.1").Trim();
-            var port = env.Get("ADMIN_CONTROL_PORT", "3213").Trim();
+            var port = ResolveAssignedAdminPort(env);
 
             if (string.IsNullOrWhiteSpace(host))
             {
                 host = "127.0.0.1";
             }
 
-            if (string.IsNullOrWhiteSpace(port))
+            return string.Format("http://{0}:{1}", host, port);
+        }
+
+        private string ResolveAssignedAdminPort(EnvFile env)
+        {
+            var assignedPort = ReadManagedPort();
+            if (assignedPort.HasValue)
             {
-                port = "3213";
+                return assignedPort.Value.ToString();
             }
 
-            return string.Format("http://{0}:{1}", host, port);
+            var configuredPort = env.Get("ADMIN_CONTROL_PORT", "3213").Trim();
+            if (!string.IsNullOrWhiteSpace(configuredPort))
+            {
+                return configuredPort;
+            }
+
+            return "3213";
+        }
+
+        private int? ReadManagedPort()
+        {
+            try
+            {
+                string resolveError;
+                var startInfo = BuildPortmuxProcessStartInfo(
+                    "--json status",
+                    out resolveError
+                );
+                if (startInfo == null)
+                {
+                    return null;
+                }
+
+                string stdout;
+                string stderr;
+                int exitCode;
+                if (!TryRunProcessForOutput(startInfo, out stdout, out stderr, out exitCode))
+                {
+                    return null;
+                }
+
+                if (exitCode != 0 || string.IsNullOrWhiteSpace(stdout))
+                {
+                    return null;
+                }
+
+                var envelope = _serializer.Deserialize<PortmuxStatusEnvelope>(stdout.Trim());
+                if (envelope == null || !envelope.ok || envelope.data == null || envelope.data.project == null)
+                {
+                    return null;
+                }
+
+                return envelope.data.project.assigned_port;
+            }
+            catch
+            {
+                return null;
+            }
+        }
+
+        private ProcessStartInfo BuildPortmuxProcessStartInfo(string portmuxArguments, out string errorMessage)
+        {
+            errorMessage = null;
+
+            var explicitBinary = Environment.GetEnvironmentVariable("PORTMUX_BIN");
+            if (!string.IsNullOrWhiteSpace(explicitBinary))
+            {
+                if (!File.Exists(explicitBinary))
+                {
+                    errorMessage = string.Format("PORTMUX_BIN 指向的文件不存在：{0}", explicitBinary);
+                    return null;
+                }
+
+                return CreateProcessStartInfo(explicitBinary, portmuxArguments);
+            }
+
+            var manifestPath = ResolvePortmuxManifestPath();
+            if (!string.IsNullOrWhiteSpace(manifestPath))
+            {
+                var cargoArguments = string.Format(
+                    "run --manifest-path \"{0}\" -- {1} --project \"{2}\"",
+                    manifestPath,
+                    portmuxArguments,
+                    _repoRoot
+                );
+                return CreateProcessStartInfo("cargo", cargoArguments);
+            }
+
+            return CreateProcessStartInfo(
+                "portmux",
+                string.Format("{0} --project \"{1}\"", portmuxArguments, _repoRoot)
+            );
+        }
+
+        private ProcessStartInfo CreateProcessStartInfo(string fileName, string arguments)
+        {
+            var startInfo = new ProcessStartInfo
+            {
+                FileName = fileName,
+                Arguments = arguments,
+                WorkingDirectory = _repoRoot,
+                UseShellExecute = false,
+                CreateNoWindow = true,
+                RedirectStandardOutput = true,
+                RedirectStandardError = true
+            };
+            startInfo.EnvironmentVariables["FAKECLAW_DATA_DIR"] = _dataRoot;
+            startInfo.EnvironmentVariables["FAKECLAW_APP_ROOT"] = _repoRoot;
+            return startInfo;
+        }
+
+        private string ResolvePortmuxManifestPath()
+        {
+            var explicitManifest = Environment.GetEnvironmentVariable("PORTMUX_MANIFEST_PATH");
+            if (!string.IsNullOrWhiteSpace(explicitManifest) && File.Exists(explicitManifest))
+            {
+                return Path.GetFullPath(explicitManifest);
+            }
+
+            var workspaceRoot = Directory.GetParent(_repoRoot);
+            if (workspaceRoot != null)
+            {
+                workspaceRoot = workspaceRoot.Parent;
+            }
+
+            if (workspaceRoot != null)
+            {
+                var candidate = Path.Combine(workspaceRoot.FullName, "PortManager", "Cargo.toml");
+                if (File.Exists(candidate))
+                {
+                    return candidate;
+                }
+            }
+
+            var current = Directory.GetParent(_repoRoot);
+            while (current != null)
+            {
+                var candidate = Path.Combine(current.FullName, "PortManager", "Cargo.toml");
+                if (File.Exists(candidate))
+                {
+                    return candidate;
+                }
+
+                current = current.Parent;
+            }
+
+            return null;
+        }
+
+        private static bool TryRunProcessForOutput(
+            ProcessStartInfo startInfo,
+            out string stdout,
+            out string stderr,
+            out int exitCode
+        )
+        {
+            stdout = string.Empty;
+            stderr = string.Empty;
+            exitCode = -1;
+
+            try
+            {
+                using (var process = Process.Start(startInfo))
+                {
+                    if (process == null)
+                    {
+                        return false;
+                    }
+
+                    stdout = process.StandardOutput.ReadToEnd();
+                    stderr = process.StandardError.ReadToEnd();
+                    process.WaitForExit();
+                    exitCode = process.ExitCode;
+                    return true;
+                }
+            }
+            catch
+            {
+                return false;
+            }
         }
 
         private string ResolveRepoRoot()
@@ -703,6 +874,23 @@ namespace FakeClaw.Tray
             public bool keepDisplayAwakeRunning { get; set; }
 
             public string lastError { get; set; }
+        }
+
+        private sealed class PortmuxStatusEnvelope
+        {
+            public bool ok { get; set; }
+
+            public PortmuxStatusData data { get; set; }
+        }
+
+        private sealed class PortmuxStatusData
+        {
+            public PortmuxStatusProject project { get; set; }
+        }
+
+        private sealed class PortmuxStatusProject
+        {
+            public int? assigned_port { get; set; }
         }
     }
 }

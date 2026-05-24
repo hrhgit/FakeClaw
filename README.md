@@ -138,6 +138,18 @@ Copy-Item .env.example .env
 
 ### 启动方式
 
+推荐通过 `portmux` 启动，这样本地监听端口会跟当前项目自动绑定，避免和系统保留端口或其他项目冲突：
+
+```powershell
+portmux start
+```
+
+如果本机还没有把 `portmux` 放进 PATH，也可以直接：
+
+```powershell
+cargo run --manifest-path E:\_workSpace\PortManager\Cargo.toml -- start
+```
+
 只启动转发服务：
 
 ```powershell
@@ -173,7 +185,7 @@ npm run dev
 说明：
 
 - 首次运行会先执行 `scripts/build-tray-app.ps1`，编译生成 `tray/bin/FakeClaw.Tray.exe`
-- 托盘程序会在后台拉起 `node src/index.js`，并通过本地管理接口读取状态
+- 托盘程序会在后台拉起 `portmux start`，并通过 `portmux` 已分配的本地管理接口读取状态
 - 托盘菜单支持查看状态、暂停通知、恢复通知、重启服务、打开配置面板和退出
 - 双击托盘图标可打开配置窗口；点击“保存并应用”后会自动重启服务，使新的 `.env` 配置立即生效
 - 当前平台为 `napcat` 时，托盘启动服务前会尝试按 `NAPCAT_START_SCRIPT` 拉起 NapCat
@@ -223,7 +235,8 @@ npm run dev
 - `WECOM_TOKEN`: 回调验签 token
 - `WECOM_ENCODING_AES_KEY`: 回调消息解密密钥
 - `WECOM_WEBHOOK_HOST`: 本地事件监听地址，默认 `127.0.0.1`
-- `WECOM_WEBHOOK_PORT`: 本地事件监听端口，默认 `3212`
+- `WECOM_WEBHOOK_PORT`: 企业微信本地事件监听端口；未显式配置时默认等于 `ADMIN_CONTROL_PORT + 2`
+- `WECOM_WEBHOOK_PORT_OFFSET`: 当 `WECOM_WEBHOOK_PORT` 未显式配置时，默认偏移量为 `2`
 - `WECOM_WEBHOOK_PATH`: 默认 `/wecom/events`
 - `WECOM_API_BASE_URL`: 默认 `https://qyapi.weixin.qq.com`
 
@@ -237,7 +250,7 @@ npm run dev
 ### 本地管理接口
 
 - `ADMIN_CONTROL_HOST`: 本地管理接口监听地址，默认 `127.0.0.1`
-- `ADMIN_CONTROL_PORT`: 本地管理接口端口，默认 `3213`
+- `ADMIN_CONTROL_PORT`: 本地管理接口端口；若通过 `portmux` 启动，会优先使用分配到的 `PORT`
 
 说明：
 
@@ -270,7 +283,8 @@ npm run dev
 
 - `CALIBRATION_WEB_ENABLED`: 是否启用本地校准页，默认启用
 - `CALIBRATION_WEB_HOST`: 校准页监听地址，默认 `127.0.0.1`
-- `CALIBRATION_WEB_PORT`: 校准页端口，默认 `3210`
+- `CALIBRATION_WEB_PORT`: 校准页端口；未显式配置时默认等于 `ADMIN_CONTROL_PORT + 1`
+- `CALIBRATION_WEB_PORT_OFFSET`: 当 `CALIBRATION_WEB_PORT` 未显式配置时，默认偏移量为 `1`
 
 ## 远程命令
 
@@ -361,7 +375,7 @@ npm run dev
 项目启动后可访问：
 
 ```text
-http://127.0.0.1:3210/calibration/
+http://127.0.0.1:<ADMIN_CONTROL_PORT + 1>/calibration/
 ```
 
 校准页支持：

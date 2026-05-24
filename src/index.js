@@ -37,6 +37,7 @@ import {
   resolveDataPath,
   resolveRuntimePath
 } from "./app-runtime.js";
+import { ADMIN_CONTROL_PORT } from "./port-layout.js";
 
 const MENU_COMMAND_ZH = "\u83dc\u5355";
 const STATUS_COMMAND_ZH = "\u72b6\u6001";
@@ -197,7 +198,6 @@ const DEDUPE_WINDOW_MS = Number(process.env.NOTIFY_DEDUPE_WINDOW_MS || 10000);
 const NOTIFY_POLL_INTERVAL_MS = Number(process.env.NOTIFY_POLL_INTERVAL_MS || 1500);
 const LISTENER_RESTART_MS = Number(process.env.LISTENER_RESTART_MS || 3000);
 const ADMIN_CONTROL_HOST = process.env.ADMIN_CONTROL_HOST || "127.0.0.1";
-const ADMIN_CONTROL_PORT = Number(process.env.ADMIN_CONTROL_PORT || 3213);
 const POWERSHELL_PATH = process.env.POWERSHELL_PATH || "powershell.exe";
 const FILTER_MODE = process.env.NOTIFY_FILTER_MODE || "all";
 const FILTER_KEYWORDS = parseCsv(process.env.NOTIFY_KEYWORDS);

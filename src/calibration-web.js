@@ -9,10 +9,11 @@ import {
 } from "./calibration.js";
 import "./app-runtime.js";
 import { resolveRuntimePath } from "./app-runtime.js";
+import { CALIBRATION_WEB_PORT } from "./port-layout.js";
 
 const STATIC_ROOT = resolveRuntimePath("public", "calibration");
 const DEFAULT_HOST = process.env.CALIBRATION_WEB_HOST || "127.0.0.1";
-const DEFAULT_PORT = Number(process.env.CALIBRATION_WEB_PORT || 3210);
+const DEFAULT_PORT = CALIBRATION_WEB_PORT;
 
 const CONTENT_TYPES = {
   ".html": "text/html; charset=utf-8",

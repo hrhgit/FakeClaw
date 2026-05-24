@@ -211,7 +211,6 @@ namespace FakeClaw.Tray
             tabs.TabPages.Add(CreatePlatformTab("QQ / NapCat", "napcat", new[]
             {
                 FieldDefinition.Text("NAPCAT_WS_URL", "NapCat WS 地址"),
-                FieldDefinition.Masked("NAPCAT_TOKEN", "NapCat Token（可留空自动获取）"),
                 FieldDefinition.File("NAPCAT_START_SCRIPT", "NapCat 启动脚本"),
                 FieldDefinition.Text("QQ_USER_ID", "QQ 用户 ID")
             }));
@@ -443,16 +442,11 @@ namespace FakeClaw.Tray
         private void OpenCalibrationPage()
         {
             var host = _envFile.Get("CALIBRATION_WEB_HOST", "127.0.0.1").Trim();
-            var port = _envFile.Get("CALIBRATION_WEB_PORT", "3210").Trim();
+            var port = ResolveCalibrationPort();
 
             if (string.IsNullOrWhiteSpace(host))
             {
                 host = "127.0.0.1";
-            }
-
-            if (string.IsNullOrWhiteSpace(port))
-            {
-                port = "3210";
             }
 
             var url = string.Format("http://{0}:{1}/calibration/", host, port);
@@ -469,6 +463,37 @@ namespace FakeClaw.Tray
             {
                 MessageBox.Show(this, string.Format("无法打开校准网页：{0}", error.Message), "打开失败", MessageBoxButtons.OK, MessageBoxIcon.Warning);
             }
+        }
+
+        private string ResolveCalibrationPort()
+        {
+            var explicitPort = _envFile.Get("CALIBRATION_WEB_PORT", string.Empty).Trim();
+            if (!string.IsNullOrWhiteSpace(explicitPort))
+            {
+                return explicitPort;
+            }
+
+            int adminPort;
+            if (!int.TryParse(_envFile.Get("PORT", string.Empty).Trim(), out adminPort) || adminPort <= 0)
+            {
+                if (!int.TryParse(_envFile.Get("ADMIN_CONTROL_PORT", "3213").Trim(), out adminPort) || adminPort <= 0)
+                {
+                    adminPort = 3213;
+                }
+            }
+
+            if (adminPort <= 0)
+            {
+                adminPort = 3213;
+            }
+
+            int offset;
+            if (!int.TryParse(_envFile.Get("CALIBRATION_WEB_PORT_OFFSET", "1").Trim(), out offset) || offset < 0)
+            {
+                offset = 1;
+            }
+
+            return (adminPort + offset).ToString();
         }
 
         private void SaveAndClose(bool applyToRunningService)

@@ -2,6 +2,7 @@ import { EventEmitter } from "node:events";
 import "./app-runtime.js";
 import { FeishuClient } from "./feishu-client.js";
 import { createImageSegment, createTextSegment, NapCatClient } from "./napcat-client.js";
+import { WECOM_WEBHOOK_PORT } from "./port-layout.js";
 import { TelegramClient } from "./telegram-client.js";
 import { WecomClient } from "./wecom-client.js";
 
@@ -162,7 +163,7 @@ function createUnderlyingClient(platform) {
         token: process.env.WECOM_TOKEN || "",
         encodingAesKey: process.env.WECOM_ENCODING_AES_KEY || "",
         webhookHost: process.env.WECOM_WEBHOOK_HOST || "127.0.0.1",
-        webhookPort: process.env.WECOM_WEBHOOK_PORT || 3212,
+        webhookPort: process.env.WECOM_WEBHOOK_PORT || WECOM_WEBHOOK_PORT,
         webhookPath: process.env.WECOM_WEBHOOK_PATH || "/wecom/events",
         apiBaseUrl: process.env.WECOM_API_BASE_URL || "https://qyapi.weixin.qq.com"
       });

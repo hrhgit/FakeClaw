@@ -1,0 +1,4 @@
+{
+  "start": "npm start",
+  "port_env": ["PORT", "ADMIN_CONTROL_PORT"]
+}
